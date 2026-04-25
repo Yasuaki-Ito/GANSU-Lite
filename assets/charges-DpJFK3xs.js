@@ -33,7 +33,7 @@ ${[0,120,240].map(r=>r*Math.PI/180).map(r=>`H  ${(1.19*Math.cos(r)).toFixed(6)} 
 HeH+
 He  0.0  0.0  0.0
 H   0.0  0.0  0.774000`},{id:"bh4",labelKey:"chg.scenBH4",descKey:"chg.descBH4",category:"ion",charge:-1,mult:1,xyz:(()=>{const e=1.255/Math.sqrt(3);return["5","BH4-","B   0.000000  0.000000  0.000000",`H   ${e.toFixed(6)}  ${e.toFixed(6)}  ${e.toFixed(6)}`,`H   ${e.toFixed(6)}  ${(-e).toFixed(6)}  ${(-e).toFixed(6)}`,`H   ${(-e).toFixed(6)}  ${e.toFixed(6)}  ${(-e).toFixed(6)}`,`H   ${(-e).toFixed(6)}  ${(-e).toFixed(6)}  ${e.toFixed(6)}`].join(`
-`)})()}],Z={homo:"chg.catHomo",hetero:"chg.catHetero",poly:"chg.catPoly",ion:"chg.catIon"};let F=z[0],y=new Map,h=!1,C=!1;const N=new Map;async function J(t){const e=N.get(t);if(e)return e;const o=`/Program%20Files/Git/GANSU-Lite/basis/${t.toLowerCase()}.gbs`,r=await fetch(o);if(!r.ok)throw new Error(`Failed to load basis set: ${t}`);const n=await r.text(),a=V.fromGBS(n);return N.set(t,a),a}const g=document.getElementById("app");function v(){const t=y.has(F.id);g.innerHTML=`
+`)})()}],Z={homo:"chg.catHomo",hetero:"chg.catHetero",poly:"chg.catPoly",ion:"chg.catIon"};let F=z[0],y=new Map,h=!1,C=!1;const N=new Map;async function J(t){const e=N.get(t);if(e)return e;const o=`/GANSU-Lite/basis/${t.toLowerCase()}.gbs`,r=await fetch(o);if(!r.ok)throw new Error(`Failed to load basis set: ${t}`);const n=await r.text(),a=V.fromGBS(n);return N.set(t,a),a}const g=document.getElementById("app");function v(){const t=y.has(F.id);g.innerHTML=`
     <div class="opt-page">
       ${j("charges")}
 
