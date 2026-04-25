@@ -1,4 +1,4 @@
-import{i as O,c as A,r as j,t as s,a as I,b as G,g as P}from"./nav-BaYBNpRD.js";import{p as U}from"./parseXYZ-DTmoiCYR.js";import{t as Y,u as _,b as D,B as K,d as V}from"./builder-B-MUn5dT.js";import{a as Q,b as W}from"./properties-CNs3u-bv.js";import{a as X}from"./moleculeViewer3D-VwrYKzKl.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
+import{i as O,c as A,r as j,t as s,a as I,b as G,g as P}from"./nav-Lc1uTV-6.js";import{p as U}from"./parseXYZ-DTmoiCYR.js";import{t as Y,u as _,b as D,B as K,d as V}from"./builder-B-MUn5dT.js";import{a as Q,b as W}from"./properties-CNs3u-bv.js";import{a as X}from"./moleculeViewer3D-B1aGFjc3.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"n2",labelKey:"chg.scenN2",descKey:"chg.descN2",category:"homo",charge:0,mult:1,xyz:`2

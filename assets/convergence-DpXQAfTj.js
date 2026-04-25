@@ -1,4 +1,4 @@
-import{i as j,c as P,r as A,t as d,a as U,b as D,g as V,d as X}from"./nav-BaYBNpRD.js";import{p as Y}from"./parseXYZ-DTmoiCYR.js";import{t as Z,u as _,d as J}from"./builder-B-MUn5dT.js";const O=[{id:"h2",labelKey:"conv.scenH2",descKey:"conv.descH2",charge:0,mult:1,xyz:`2
+import{i as j,c as P,r as A,t as d,a as U,b as D,g as V,d as X}from"./nav-Lc1uTV-6.js";import{p as Y}from"./parseXYZ-DTmoiCYR.js";import{t as Z,u as _,d as J}from"./builder-B-MUn5dT.js";const O=[{id:"h2",labelKey:"conv.scenH2",descKey:"conv.descH2",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"hf",labelKey:"conv.scenHF",descKey:"conv.descHF",charge:0,mult:1,xyz:`2
