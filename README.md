@@ -56,8 +56,8 @@ Every page (except DFT functional ladder) provides a **Theory selector** to swit
 
 PySCF cross-check (grid level 5, 17 cases):
 
-| Functional family | |E_GANSU − E_PySCF| | |HOMO_GANSU − HOMO_PySCF| |
-|-------------------|-----:|-----:|
+| Functional family | ΔE (vs PySCF) | ΔHOMO (vs PySCF) |
+|-------------------|--------------:|-----------------:|
 | LDA / GGA / standard hybrid | < 0.2 mH | < 0.05 eV |
 | TPSS (full PKZB) | 17–60 mH | < 0.2 eV |
 | CAM-B3LYP, ωB97X-D (RSH-lite) | 80–150 mH | 0.6–1.0 eV (expected from simplification) |
