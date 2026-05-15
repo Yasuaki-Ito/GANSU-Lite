@@ -1,4 +1,4 @@
-import{i as O,c as A,r as j,t as s,a as I,b as G,g as P}from"./nav-Lc1uTV-6.js";import{p as U}from"./parseXYZ-DTmoiCYR.js";import{t as Y,u as _,b as D,B as K,d as V}from"./builder-B-MUn5dT.js";import{a as Q,b as W}from"./properties-CNs3u-bv.js";import{a as X}from"./moleculeViewer3D-B1aGFjc3.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
+import{i as A,c as j,r as I,t as i,a as G,b as P,g as D}from"./nav-BKexlM7u.js";import{p as U}from"./parseXYZ-BE3rbSP_.js";import{g as Y,b as _,B as K,f as V}from"./ri-Cuj4t-H2.js";import{a as Q,b as W}from"./theoryControls-AWp8GxPQ.js";import{a as X,b as Z}from"./properties-DST8hwXs.js";import{a as J}from"./moleculeViewer3D-Bo3isAw0.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"n2",labelKey:"chg.scenN2",descKey:"chg.descN2",category:"homo",charge:0,mult:1,xyz:`2
@@ -33,26 +33,30 @@ ${[0,120,240].map(r=>r*Math.PI/180).map(r=>`H  ${(1.19*Math.cos(r)).toFixed(6)} 
 HeH+
 He  0.0  0.0  0.0
 H   0.0  0.0  0.774000`},{id:"bh4",labelKey:"chg.scenBH4",descKey:"chg.descBH4",category:"ion",charge:-1,mult:1,xyz:(()=>{const e=1.255/Math.sqrt(3);return["5","BH4-","B   0.000000  0.000000  0.000000",`H   ${e.toFixed(6)}  ${e.toFixed(6)}  ${e.toFixed(6)}`,`H   ${e.toFixed(6)}  ${(-e).toFixed(6)}  ${(-e).toFixed(6)}`,`H   ${(-e).toFixed(6)}  ${e.toFixed(6)}  ${(-e).toFixed(6)}`,`H   ${(-e).toFixed(6)}  ${(-e).toFixed(6)}  ${e.toFixed(6)}`].join(`
-`)})()}],Z={homo:"chg.catHomo",hetero:"chg.catHetero",poly:"chg.catPoly",ion:"chg.catIon"};let F=z[0],y=new Map,h=!1,C=!1;const N=new Map;async function J(t){const e=N.get(t);if(e)return e;const o=`/GANSU-Lite/basis/${t.toLowerCase()}.gbs`,r=await fetch(o);if(!r.ok)throw new Error(`Failed to load basis set: ${t}`);const n=await r.text(),a=V.fromGBS(n);return N.set(t,a),a}const g=document.getElementById("app");function v(){const t=y.has(F.id);g.innerHTML=`
+`)})()}],ee={homo:"chg.catHomo",hetero:"chg.catHetero",poly:"chg.catPoly",ion:"chg.catIon"};let F=z[0],f=new Map,g=!1,L=!1,C="HF";const T=new Map;async function te(t){const e=T.get(t);if(e)return e;const o=`/GANSU-Lite/basis/${t.toLowerCase()}.gbs`,r=await fetch(o);if(!r.ok)throw new Error(`Failed to load basis set: ${t}`);const n=await r.text(),a=V.fromGBS(n);return T.set(t,a),a}const m=document.getElementById("app");function v(){const t=f.has(F.id);m.innerHTML=`
     <div class="opt-page">
-      ${j("charges")}
+      ${I("charges")}
 
       <div class="opt-content">
         <div class="opt-panel opt-controls">
-          <h2>${s("chg.molecule")}</h2>
+          <h2>${i("chg.molecule")}</h2>
           <div class="opt-scenario-grid" id="scen-grid"></div>
 
           <div class="ladder-basis-info">
-            <span style="color:var(--color-text-dim);font-size:0.72rem">${s("chg.basis")}: STO-3G</span>
+            <span style="color:var(--color-text-dim);font-size:0.72rem">${i("chg.basis")}: STO-3G</span>
           </div>
 
-          <button id="run-btn" class="opt-run-btn" ${h?"disabled":""}>
-            ${h?s("chg.running"):t?s("chg.rerun"):s("chg.run")}
+          <div class="theory-row" style="margin:8px 0;display:flex;align-items:center;gap:8px;font-size:0.9rem;">
+            <span>Theory:</span>${Q("theory-sel",C)}
+          </div>
+
+          <button id="run-btn" class="opt-run-btn" ${g?"disabled":""}>
+            ${g?i("chg.running"):t?i("chg.rerun"):i("chg.run")}
           </button>
-          <button id="run-all-btn" class="opt-run-all-btn" ${h?"disabled":""}>
-            ${s("chg.runAll")}
+          <button id="run-all-btn" class="opt-run-all-btn" ${g?"disabled":""}>
+            ${i("chg.runAll")}
           </button>
-          ${h?`<button id="stop-btn" class="opt-stop-btn">${s("chg.stop")}</button>`:""}
+          ${g?`<button id="stop-btn" class="opt-stop-btn">${i("chg.stop")}</button>`:""}
 
           <div id="progress-area"></div>
           <div id="summary-area"></div>
@@ -60,31 +64,31 @@ H   0.0  0.0  0.774000`},{id:"bh4",labelKey:"chg.scenBH4",descKey:"chg.descBH4",
 
         <div class="opt-panel opt-graph-panel">
           <div id="mol-vis">
-            ${!t&&!h?`<p class="opt-hint">${s("chg.waiting")}</p>`:""}
+            ${!t&&!g?`<p class="opt-hint">${i("chg.waiting")}</p>`:""}
           </div>
           <div id="compare-chart"></div>
         </div>
       </div>
-    </div>`,ce();const e=g.querySelector("#scen-grid"),o=["homo","hetero","poly","ion"];for(const r of o){const n=z.filter(c=>c.category===r);if(n.length===0)continue;const a=document.createElement("div");a.className="chg-cat-label",a.textContent=s(Z[r]),e.appendChild(a);const m=document.createElement("div");m.className="opt-category-row";for(const c of n){const f=document.createElement("div"),u=y.has(c.id);f.className="opt-scenario-card"+(c.id===F.id?" selected":"")+(u?" computed":""),f.innerHTML=`<strong>${s(c.labelKey)}</strong><span class="conv-desc">${s(c.descKey)}</span>`,f.addEventListener("click",()=>{h||(F=c,v())}),m.appendChild(f)}e.appendChild(m)}g.querySelector("#nav-theme").addEventListener("click",()=>{I(),v()}),g.querySelector("#nav-lang").addEventListener("click",()=>{G(),v()}),g.querySelector("#run-btn").addEventListener("click",()=>{h||ee(F)}),g.querySelector("#run-all-btn").addEventListener("click",()=>{h||te()}),g.querySelector("#stop-btn")?.addEventListener("click",()=>{C=!0}),t&&(ne(y.get(F.id)),re(y.get(F.id))),y.size>1&&ae()}async function E(t){const e=await J("STO-3G"),o=U(t.xyz),r=Math.floor((t.mult-1)/2),n=new Y(o,e,t.charge,r),a=performance.now(),m=_(n,"RHF");await m.solve({eriBackend:"js"});const c=performance.now()-a,f=Q(m.density,m.overlap,n.atoms,n.atomToBasisRange),u=W(m.density,n.atoms,n.primitiveShells,n.cgtoNormalizationFactors,n.numBasis),p=[],b=[];for(const x of n.atoms)p.push(D(x.atomicNumber)),b.push({x:x.coordinate.x*K,y:x.coordinate.y*K,z:x.coordinate.z*K});return{molId:t.id,charges:Array.from(f),dipole:u,atomSymbols:p,atomCoords:b,timeMs:c}}async function ee(t){h=!0,v();try{const e=await E(t);y.set(t.id,e)}catch(e){console.error("Charge computation error:",e)}h=!1,v()}async function te(){h=!0,C=!1,v();for(let t=0;t<z.length&&!C;t++){const e=z[t];oe(t,z.length,s(e.labelKey));try{const o=await E(e);y.set(e.id,o)}catch(o){console.error(`Error computing ${e.id}:`,o)}await new Promise(o=>setTimeout(o,0))}h=!1,v()}function oe(t,e,o){const r=g.querySelector("#progress-area");if(!r)return;const n=(t/e*100).toFixed(0);r.innerHTML=`
+    </div>`,se();const e=m.querySelector("#scen-grid"),o=["homo","hetero","poly","ion"];for(const n of o){const a=z.filter(x=>x.category===n);if(a.length===0)continue;const u=document.createElement("div");u.className="chg-cat-label",u.textContent=i(ee[n]),e.appendChild(u);const s=document.createElement("div");s.className="opt-category-row";for(const x of a){const h=document.createElement("div"),d=f.has(x.id);h.className="opt-scenario-card"+(x.id===F.id?" selected":"")+(d?" computed":""),h.innerHTML=`<strong>${i(x.labelKey)}</strong><span class="conv-desc">${i(x.descKey)}</span>`,h.addEventListener("click",()=>{g||(F=x,v())}),s.appendChild(h)}e.appendChild(s)}m.querySelector("#nav-theme").addEventListener("click",()=>{G(),v()}),m.querySelector("#nav-lang").addEventListener("click",()=>{P(),v()});const r=m.querySelector("#theory-sel");r&&r.addEventListener("change",()=>{C=r.value}),m.querySelector("#run-btn").addEventListener("click",()=>{g||oe(F)}),m.querySelector("#run-all-btn").addEventListener("click",()=>{g||re()}),m.querySelector("#stop-btn")?.addEventListener("click",()=>{L=!0}),t&&(ce(f.get(F.id)),ae(f.get(F.id))),f.size>1&&ie()}async function E(t){const e=await te("STO-3G"),o=U(t.xyz),r=Math.floor((t.mult-1)/2),n=new Y(o,e,t.charge,r),a=performance.now(),u=await W(n,e,C);await u.solve({eriBackend:"js"});const s=performance.now()-a,x=X(u.density,u.overlap,n.atoms,n.atomToBasisRange),h=Z(u.density,n.atoms,n.primitiveShells,n.cgtoNormalizationFactors,n.numBasis),d=[],b=[];for(const y of n.atoms)d.push(_(y.atomicNumber)),b.push({x:y.coordinate.x*K,y:y.coordinate.y*K,z:y.coordinate.z*K});return{molId:t.id,charges:Array.from(x),dipole:h,atomSymbols:d,atomCoords:b,timeMs:s}}async function oe(t){g=!0,v();try{const e=await E(t);f.set(t.id,e)}catch(e){console.error("Charge computation error:",e)}g=!1,v()}async function re(){g=!0,L=!1,v();for(let t=0;t<z.length&&!L;t++){const e=z[t];ne(t,z.length,i(e.labelKey));try{const o=await E(e);f.set(e.id,o)}catch(o){console.error(`Error computing ${e.id}:`,o)}await new Promise(o=>setTimeout(o,0))}g=!1,v()}function ne(t,e,o){const r=m.querySelector("#progress-area");if(!r)return;const n=(t/e*100).toFixed(0);r.innerHTML=`
     <div class="opt-progress"><div class="opt-progress-bar" style="width:${n}%"></div></div>
-    <div class="opt-progress-text">${o} (${t+1}/${e})</div>`}function re(t){const e=g.querySelector("#summary-area");if(!e)return;let o=`<div class="opt-summary">
-    <h3>${s("chg.done")}</h3>
+    <div class="opt-progress-text">${o} (${t+1}/${e})</div>`}function ae(t){const e=m.querySelector("#summary-area");if(!e)return;let o=`<div class="opt-summary">
+    <h3>${i("chg.done")}</h3>
     <table>
       <tr>
-        <th>${s("chg.colAtom")}</th>
-        <th>${s("chg.colCharge")}</th>
-      </tr>`;for(let r=0;r<t.atomSymbols.length;r++){const n=t.charges[r],a=L(n);o+=`<tr>
+        <th>${i("chg.colAtom")}</th>
+        <th>${i("chg.colCharge")}</th>
+      </tr>`;for(let r=0;r<t.atomSymbols.length;r++){const n=t.charges[r],a=N(n);o+=`<tr>
       <td>${t.atomSymbols[r]}${r+1}</td>
       <td style="font-family:monospace;color:${a};font-weight:600">${n>=0?"+":""}${n.toFixed(4)}</td>
     </tr>`}o+=`</table>
     <div style="margin-top:8px;font-size:0.75rem;">
-      <span style="color:var(--color-text-dim)">${s("chg.dipole")}:</span>
+      <span style="color:var(--color-text-dim)">${i("chg.dipole")}:</span>
       <strong>${t.dipole.debye.toFixed(3)} D</strong>
     </div>
     <div style="font-size:0.68rem;color:var(--color-text-dim);margin-top:2px">
-      ${s("chg.time")}: ${t.timeMs<1e3?t.timeMs.toFixed(0)+"ms":(t.timeMs/1e3).toFixed(1)+"s"}
+      ${i("chg.time")}: ${t.timeMs<1e3?t.timeMs.toFixed(0)+"ms":(t.timeMs/1e3).toFixed(1)+"s"}
     </div>
-  </div>`,e.innerHTML=o}function L(t){const o=Math.max(-.6,Math.min(.6,t))/.6;if(o>0){const r=Math.round(255*(1-o)),n=Math.round(255*(1-o));return`rgb(${r},${n},255)`}else{const r=-o,n=Math.round(255*(1-r)),a=Math.round(255*(1-r));return`rgb(255,${n},${a})`}}function ne(t){const e=g.querySelector("#mol-vis");e&&X(e,t)}function ae(){const t=g.querySelector("#compare-chart");if(!t||y.size<2)return;const e=P(),o=[];for(const l of z){const i=y.get(l.id);if(!i)continue;let $=0;for(let w=1;w<i.atomSymbols.length;w++)i.atomSymbols[w]!=="H"&&i.atomSymbols[$]==="H"&&($=w);const M=i.atomSymbols[$];o.push({label:`${s(l.labelKey)} (${M})`,charge:i.charges[$]})}if(o.length<2)return;const r=560,n=200,a=82,m=20,c=28,f=60,u=r-a-m,p=n-c-f,b=Math.max(.1,...o.map(l=>Math.abs(l.charge)))*1.2,x=u/o.length,S=l=>c+p/2-l/b*(p/2);let d=`<svg width="${r}" height="${n}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r} ${n}" style="max-width:100%;margin-top:12px;">`;d+=`<rect x="${a}" y="${c}" width="${u}" height="${p}" fill="${e.surface}" rx="2"/>`;const H=S(0);d+=`<line x1="${a}" y1="${H}" x2="${a+u}" y2="${H}" stroke="${e.axis}" stroke-width="1"/>`;const T=[b*.5,-b*.5,b,-b];for(const l of T){const i=S(l);i>=c&&i<=c+p&&(d+=`<line x1="${a}" y1="${i}" x2="${a+u}" y2="${i}" stroke="${e.grid}" stroke-width="0.5"/>`,d+=`<text x="${a-6}" y="${i+3}" text-anchor="end" font-size="8" fill="${e.dim}">${l>=0?"+":""}${l.toFixed(2)}</text>`)}d+=`<text x="${a-6}" y="${H+3}" text-anchor="end" font-size="8" fill="${e.dim}">0</text>`,d+=`<line x1="${a}" y1="${c}" x2="${a}" y2="${c+p}" stroke="${e.axis}" stroke-width="1"/>`;for(let l=0;l<o.length;l++){const i=o[l],$=a+x*l+x/2,M=a+x*l+x*.2,w=x*.6,k=S(i.charge),R=L(i.charge);i.charge>=0?d+=`<rect x="${M}" y="${k}" width="${w}" height="${H-k}" fill="${R}" opacity="0.85" rx="2"/>`:d+=`<rect x="${M}" y="${H}" width="${w}" height="${k-H}" fill="${R}" opacity="0.85" rx="2"/>`;const q=i.charge>=0?k-5:k+12;d+=`<text x="${$}" y="${q}" text-anchor="middle" font-size="8" fill="${L(i.charge)}" font-weight="700">${i.charge>=0?"+":""}${i.charge.toFixed(3)}</text>`,d+=`<text x="${$}" y="${c+p+12}" text-anchor="middle" font-size="7.5" fill="${e.dim}" transform="rotate(-30,${$},${c+p+12})">${i.label}</text>`}d+=`<text x="${a+u/2}" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="${e.titleSvg}">${s("chg.compareTitle")}</text>`,d+=`<text x="14" y="${c+p/2}" text-anchor="middle" font-size="9" fill="${e.dim}" transform="rotate(-90,14,${c+p/2})">${s("chg.yCharge")}</text>`,d+="</svg>",t.innerHTML=d}let B=!1;function ce(){if(B)return;B=!0;const t=document.createElement("style");t.textContent=`
+  </div>`,e.innerHTML=o}function N(t){const o=Math.max(-.6,Math.min(.6,t))/.6;if(o>0){const r=Math.round(255*(1-o)),n=Math.round(255*(1-o));return`rgb(${r},${n},255)`}else{const r=-o,n=Math.round(255*(1-r)),a=Math.round(255*(1-r));return`rgb(255,${n},${a})`}}function ce(t){const e=m.querySelector("#mol-vis");e&&J(e,t)}function ie(){const t=m.querySelector("#compare-chart");if(!t||f.size<2)return;const e=D(),o=[];for(const l of z){const c=f.get(l.id);if(!c)continue;let $=0;for(let w=1;w<c.atomSymbols.length;w++)c.atomSymbols[w]!=="H"&&c.atomSymbols[$]==="H"&&($=w);const k=c.atomSymbols[$];o.push({label:`${i(l.labelKey)} (${k})`,charge:c.charges[$]})}if(o.length<2)return;const r=560,n=200,a=82,u=20,s=28,x=60,h=r-a-u,d=n-s-x,b=Math.max(.1,...o.map(l=>Math.abs(l.charge)))*1.2,y=h/o.length,S=l=>s+d/2-l/b*(d/2);let p=`<svg width="${r}" height="${n}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${r} ${n}" style="max-width:100%;margin-top:12px;">`;p+=`<rect x="${a}" y="${s}" width="${h}" height="${d}" fill="${e.surface}" rx="2"/>`;const H=S(0);p+=`<line x1="${a}" y1="${H}" x2="${a+h}" y2="${H}" stroke="${e.axis}" stroke-width="1"/>`;const q=[b*.5,-b*.5,b,-b];for(const l of q){const c=S(l);c>=s&&c<=s+d&&(p+=`<line x1="${a}" y1="${c}" x2="${a+h}" y2="${c}" stroke="${e.grid}" stroke-width="0.5"/>`,p+=`<text x="${a-6}" y="${c+3}" text-anchor="end" font-size="8" fill="${e.dim}">${l>=0?"+":""}${l.toFixed(2)}</text>`)}p+=`<text x="${a-6}" y="${H+3}" text-anchor="end" font-size="8" fill="${e.dim}">0</text>`,p+=`<line x1="${a}" y1="${s}" x2="${a}" y2="${s+d}" stroke="${e.axis}" stroke-width="1"/>`;for(let l=0;l<o.length;l++){const c=o[l],$=a+y*l+y/2,k=a+y*l+y*.2,w=y*.6,M=S(c.charge),R=N(c.charge);c.charge>=0?p+=`<rect x="${k}" y="${M}" width="${w}" height="${H-M}" fill="${R}" opacity="0.85" rx="2"/>`:p+=`<rect x="${k}" y="${H}" width="${w}" height="${M-H}" fill="${R}" opacity="0.85" rx="2"/>`;const O=c.charge>=0?M-5:M+12;p+=`<text x="${$}" y="${O}" text-anchor="middle" font-size="8" fill="${N(c.charge)}" font-weight="700">${c.charge>=0?"+":""}${c.charge.toFixed(3)}</text>`,p+=`<text x="${$}" y="${s+d+12}" text-anchor="middle" font-size="7.5" fill="${e.dim}" transform="rotate(-30,${$},${s+d+12})">${c.label}</text>`}p+=`<text x="${a+h/2}" y="16" text-anchor="middle" font-size="11" font-weight="600" fill="${e.titleSvg}">${i("chg.compareTitle")}</text>`,p+=`<text x="14" y="${s+d/2}" text-anchor="middle" font-size="9" fill="${e.dim}" transform="rotate(-90,14,${s+d/2})">${i("chg.yCharge")}</text>`,p+="</svg>",t.innerHTML=p}let B=!1;function se(){if(B)return;B=!0;const t=document.createElement("style");t.textContent=`
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--color-bg);
@@ -202,4 +206,4 @@ H   0.0  0.0  0.774000`},{id:"bh4",labelKey:"chg.scenBH4",descKey:"chg.descBH4",
       .opt-content { flex-direction: column; }
       .opt-controls { flex: none; }
     }
-  `,document.head.appendChild(t)}O();A();v();
+  `,document.head.appendChild(t)}A();j();v();
