@@ -1,10 +1,10 @@
-import{i as $t,c as ft,r as mt,t as m,a as yt,b as ut,g as dt,d as j}from"./nav-BKexlM7u.js";import{p as bt}from"./parseXYZ-BE3rbSP_.js";import{g as wt,f as vt}from"./ri-Cuj4t-H2.js";import{a as kt,H as Mt,b as Et}from"./theoryControls-AWp8GxPQ.js";function nt(n,o,c){const l=c*Math.PI/180/2,y=o*Math.sin(l),$=o*Math.cos(l);return`3
+import"./styles-B8WF9G-F.js";import{p as $t}from"./parseXYZ-BE3rbSP_.js";import{g as ft,f as mt}from"./ri-Cuj4t-H2.js";import{a as yt,H as ut,b as bt}from"./theoryControls-AWp8GxPQ.js";import{i as wt,c as vt,r as kt,t as m,a as Mt,b as Et,g as dt,d as j}from"./nav-BKPoqOVV.js";function nt(n,o,c){const l=c*Math.PI/180/2,y=o*Math.sin(l),$=o*Math.cos(l);return`3
 ${n}H2
 ${n}  0.0  0.0  0.0
 H  ${y.toFixed(6)}  0.0  ${$.toFixed(6)}
-H  ${(-y).toFixed(6)}  0.0  ${$.toFixed(6)}`}const xt=[{id:"h2o",labelKey:"walsh.scenH2O",descKey:"walsh.descH2O",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("O",.96,n)},{id:"beh2",labelKey:"walsh.scenBeH2",descKey:"walsh.descBeH2",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("Be",1.334,n)},{id:"ch2",labelKey:"walsh.scenCH2",descKey:"walsh.descCH2",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("C",1.11,n)}];let Y=xt[0],r=[],et=0,G=0,T=!1,st=!1,C=!1,pt=0,it="HF",z=0;const lt=new Map;async function zt(n){const o=lt.get(n);if(o)return o;const c=`/GANSU-Lite/basis/${n.toLowerCase()}.gbs`,x=await fetch(c);if(!x.ok)throw new Error(`Failed to load basis set: ${n}`);const l=await x.text(),y=vt.fromGBS(l);return lt.set(n,y),y}const E=document.getElementById("app");function K(){E.innerHTML=`
+H  ${(-y).toFixed(6)}  0.0  ${$.toFixed(6)}`}const xt=[{id:"h2o",labelKey:"walsh.scenH2O",descKey:"walsh.descH2O",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("O",.96,n)},{id:"beh2",labelKey:"walsh.scenBeH2",descKey:"walsh.descBeH2",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("Be",1.334,n)},{id:"ch2",labelKey:"walsh.scenCH2",descKey:"walsh.descCH2",charge:0,mult:1,angleMin:80,angleMax:180,steps:21,nCore:1,buildXYZ:n=>nt("C",1.11,n)}];let Y=xt[0],r=[],et=0,G=0,T=!1,st=!1,C=!1,pt=0,it="HF",z=0;const lt=new Map;async function zt(n){const o=lt.get(n);if(o)return o;const c=`/GANSU-Lite/basis/${n.toLowerCase()}.gbs`,x=await fetch(c);if(!x.ok)throw new Error(`Failed to load basis set: ${n}`);const l=await x.text(),y=mt.fromGBS(l);return lt.set(n,y),y}const E=document.getElementById("app");function K(){E.innerHTML=`
     <div class="opt-page">
-      ${mt("walsh")}
+      ${kt("walsh")}
 
       <div class="opt-content">
         <div class="opt-panel opt-controls">
@@ -12,7 +12,7 @@ H  ${(-y).toFixed(6)}  0.0  ${$.toFixed(6)}`}const xt=[{id:"h2o",labelKey:"walsh
           <div class="opt-scenario-grid" id="scen-grid"></div>
 
           <div class="theory-row" style="margin:12px 0 8px;display:flex;align-items:center;gap:8px;font-size:0.9rem;">
-            <span>Theory:</span>${kt("theory-sel",it,"",Mt)}
+            <span>Theory:</span>${yt("theory-sel",it,"",ut)}
           </div>
 
           <button id="run-btn" class="opt-run-btn" ${T?"disabled":""}>
@@ -32,7 +32,7 @@ H  ${(-y).toFixed(6)}  0.0  ${$.toFixed(6)}`}const xt=[{id:"h2o",labelKey:"walsh
           <div id="mol-vis"></div>
         </div>
       </div>
-    </div>`,qt();const n=E.querySelector("#scen-grid"),o=document.createElement("div");o.className="opt-category-row";for(const x of xt){const l=document.createElement("div");l.className="opt-scenario-card"+(x.id===Y.id?" selected":""),l.innerHTML=`<strong>${m(x.labelKey)}</strong><span class="conv-desc">${m(x.descKey)}</span>`,l.addEventListener("click",()=>{T||(Y=x,r=[],C=!1,K())}),o.appendChild(l)}n.appendChild(o),E.querySelector("#nav-theme").addEventListener("click",()=>{yt(),K()}),E.querySelector("#nav-lang").addEventListener("click",()=>{ut(),K()});const c=E.querySelector("#theory-sel");c&&c.addEventListener("change",()=>{it=c.value}),E.querySelector("#run-btn").addEventListener("click",()=>{T||Ft()}),E.querySelector("#stop-btn")?.addEventListener("click",()=>{st=!0}),r.length>0&&(at(),Ct(),C&&(Tt(),ht()))}async function Ft(){T=!0,st=!1,r=[],C=!1,et=0,G=0,K();const n=Y,o=performance.now(),c=await zt("STO-3G"),x=(n.angleMax-n.angleMin)/(n.steps-1);for(let l=0;l<n.steps&&!st;l++){const y=n.angleMin+l*x;St(y,l,n.steps);try{const $=n.buildXYZ(y),O=bt($),i=Math.floor((n.mult-1)/2),h=new wt(O,c,n.charge,i);l===0&&(G=h.numBasis,et=h.numAlphaSpins);const g=await Et(h,c,it),L=await g.solve({eriBackend:"js"}),b=Array.from(g.orbitalEnergies);r.push({angle:y,orbitalEnergies:b,totalEnergy:L}),at()}catch($){console.error(`Error at angle ${y}°:`,$)}await new Promise($=>setTimeout($,0))}pt=performance.now()-o,T=!1,C=!0,K()}function St(n,o,c){const x=E.querySelector("#progress-area");if(!x)return;const l=(o/c*100).toFixed(0);x.innerHTML=`
+    </div>`,qt();const n=E.querySelector("#scen-grid"),o=document.createElement("div");o.className="opt-category-row";for(const x of xt){const l=document.createElement("div");l.className="opt-scenario-card"+(x.id===Y.id?" selected":""),l.innerHTML=`<strong>${m(x.labelKey)}</strong><span class="conv-desc">${m(x.descKey)}</span>`,l.addEventListener("click",()=>{T||(Y=x,r=[],C=!1,K())}),o.appendChild(l)}n.appendChild(o),E.querySelector("#nav-theme").addEventListener("click",()=>{Mt(),K()}),E.querySelector("#nav-lang").addEventListener("click",()=>{Et(),K()});const c=E.querySelector("#theory-sel");c&&c.addEventListener("change",()=>{it=c.value}),E.querySelector("#run-btn").addEventListener("click",()=>{T||Ft()}),E.querySelector("#stop-btn")?.addEventListener("click",()=>{st=!0}),r.length>0&&(at(),Ct(),C&&(Tt(),ht()))}async function Ft(){T=!0,st=!1,r=[],C=!1,et=0,G=0,K();const n=Y,o=performance.now(),c=await zt("STO-3G"),x=(n.angleMax-n.angleMin)/(n.steps-1);for(let l=0;l<n.steps&&!st;l++){const y=n.angleMin+l*x;St(y,l,n.steps);try{const $=n.buildXYZ(y),O=$t($),i=Math.floor((n.mult-1)/2),h=new ft(O,c,n.charge,i);l===0&&(G=h.numBasis,et=h.numAlphaSpins);const g=await bt(h,c,it),L=await g.solve({eriBackend:"js"}),b=Array.from(g.orbitalEnergies);r.push({angle:y,orbitalEnergies:b,totalEnergy:L}),at()}catch($){console.error(`Error at angle ${y}°:`,$)}await new Promise($=>setTimeout($,0))}pt=performance.now()-o,T=!1,C=!0,K()}function St(n,o,c){const x=E.querySelector("#progress-area");if(!x)return;const l=(o/c*100).toFixed(0);x.innerHTML=`
     <div class="opt-progress"><div class="opt-progress-bar" style="width:${l}%"></div></div>
     <div class="opt-progress-text">${n.toFixed(0)}° (${o+1}/${c})</div>`}function Ct(){const n=E.querySelector("#summary-area");if(!n||r.length===0)return;let o=0;for(let $=1;$<r.length;$++)r[$].totalEnergy<r[o].totalEnergy&&(o=$);const c=G-Y.nCore,x=et-Y.nCore,l=(pt/1e3).toFixed(1);let y=`<div class="opt-summary">
     <h3>${C?m("walsh.done"):m("walsh.running")}</h3>
@@ -161,4 +161,4 @@ H  ${(-y).toFixed(6)}  0.0  ${$.toFixed(6)}`}const xt=[{id:"h2o",labelKey:"walsh
       .opt-content { flex-direction: column; }
       .opt-controls { flex: none; }
     }
-  `,document.head.appendChild(n)}$t();ft();K();
+  `,document.head.appendChild(n)}wt();vt();K();
