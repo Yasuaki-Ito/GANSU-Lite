@@ -4,8 +4,6 @@ A client-side, zero-install quantum-chemistry playground that runs Hartree–Foc
 
 **Live demo:** https://yasuaki-ito.github.io/GANSU-Lite/
 
-**Companion textbook:** [日本語](https://yasuaki-ito.github.io/book/qcbook/) · [English](https://yasuaki-ito.github.io/book/en/qcbook/)
-
 No server, no upload, no install — all computations run locally in JavaScript / WebAssembly.
 
 ## Features
@@ -26,13 +24,13 @@ No server, no upload, no install — all computations run locally in JavaScript 
   - Vibrational frequencies, IR intensities, thermochemistry
 - **Geometry optimisation:** SD, CG (FR/PR/HS/DY), BFGS, DFP, SR1, GDIIS
 - **Properties:** Mulliken / Löwdin charges, Wiberg bond orders, dipole moment, ⟨S²⟩, energy decomposition, Molden export
-- **Basis sets:** STO-3G, STO-6G, 3-21G, 6-31G, 6-31G(d,p), cc-pVDZ, cc-pVTZ, aug-cc-pVDZ, def2-SVP, def2-TZVP
+- **Basis sets:** STO-3G, 3-21G, 6-31G, cc-pVDZ, aug-cc-pVDZ, def2-SVP, def2-TZVP
 - **RI-J:** automatic for pure DFT (auto-generated or optimised cc-pVxZ-RIFIT auxiliary basis)
 - **Performance:** WebAssembly + SIMD acceleration, Web Worker for non-blocking UI
 
 ## Pages
 
-Every page (except DFT functional ladder) provides a **Theory selector** to switch between HF and the DFT functionals listed above.
+Every page provides a **Theory selector** to switch between HF and the DFT functionals listed above.
 
 | Page | Description |
 |------|-------------|
@@ -44,11 +42,10 @@ Every page (except DFT functional ladder) provides a **Theory selector** to swit
 | **Basis Set** (`convergence.html`) | Energy convergence vs. basis-set size (STO-3G → def2-TZVP) |
 | **Geometry Opt.** (`geomopt.html`) | Interactive optimisation with 3D force arrows; HF + DFT |
 | **Vibrations** (`freqanalysis.html`) | Frequencies, IR spectrum, thermochemistry; HF + DFT |
-| **DFT** (`dft.html`) | Functional ladder demo (LDA → GGA → meta-GGA → hybrid → RSH) |
 
 ### Heavy-combination guards
 - Iterative DFT pages (Geom Opt, Freq, PES Scan, Walsh, Basis Set) hide TPSS — its FD-based V_xc is too slow for many SCF runs.
-- Basis Set page auto-skips cc-pVTZ / def2-TZVP for DFT (~1 min per basis × molecule).
+- Basis Set page auto-skips def2-TZVP for DFT (~1 min per basis × molecule).
 - Freq Analysis disables ≥4-atom scenarios for DFT (6N grad evals × DFT × big molecule = several minutes).
 - PES Scan warns before starting DFT × UHF × ≥15 points.
 
@@ -92,3 +89,7 @@ BSD 3-Clause License. See [LICENSE](LICENSE).
 - Reference values cross-checked against [PySCF](https://pyscf.org/).
 - Auxiliary basis sets (cc-pVxZ-RIFIT) derived from PySCF's bundled Weigend / Hattig basis tables.
 - Boys function tables derived from standard quantum-chemistry literature.
+
+## Companion textbook
+
+GANSU Lite is used in the exercises of a companion textbook: [日本語](https://yasuaki-ito.github.io/book/qcbook/) · [English](https://yasuaki-ito.github.io/book/en/qcbook/)
