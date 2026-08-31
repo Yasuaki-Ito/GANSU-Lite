@@ -22,6 +22,13 @@ export interface MemoryProbeRequest {
   /** Basis-function counts to try, ascending. */
   nbasisLadder: number[];
   baseUrl: string;
+  /**
+   * How long to keep the pair resident before releasing it. iOS terminates tabs
+   * on sustained memory pressure rather than on a single allocation, so a probe
+   * that allocates and frees within milliseconds passes where the real SCF —
+   * which holds the same memory for minutes — is killed.
+   */
+  holdMs: number;
 }
 
 export type ProbeVerdict = 'ok' | 'failed' | 'unavailable';
@@ -188,6 +195,15 @@ async function probeMemory(req: MemoryProbeRequest): Promise<void> {
       jsCopy = new Float64Array(bytes / 8);
       for (let i = 0; i < jsCopy.length; i += 512) jsCopy[i] = view[i];
       if (!Number.isFinite(jsCopy[0])) throw new Error('unexpected buffer contents');
+
+      // Keep both resident, touching them so the pages cannot be reclaimed, for
+      // long enough that a pressure-based killer has the chance it would get
+      // during the real SCF.
+      const holdUntil = performance.now() + req.holdMs;
+      while (performance.now() < holdUntil) {
+        for (let i = 0; i < jsCopy.length; i += 65536) jsCopy[i] += 1;
+        for (let i = 0; i < view.length; i += 65536) view[i] += 1;
+      }
 
       post({
         type: 'probe-result', nbasis: nb, bytes, peakBytes: bytes * 2,

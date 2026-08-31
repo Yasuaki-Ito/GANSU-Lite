@@ -17,6 +17,8 @@ const STORAGE_KEY = 'gansu-stress-v1';
 const PROBE_KEY = 'gansu-stress-probe-v1';
 const DEFAULT_BUDGET_S = 180;
 const BASIS_NAME = '6-31g(d,p)';
+/** Seconds each probe size stays resident — long enough for iOS to react to it. */
+const HOLD_MS = 3000;
 
 export type StressStatus = 'ok' | 'timeout' | 'error' | 'worker-died' | 'tab-crash';
 
@@ -289,6 +291,7 @@ function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
       type: 'memory-probe',
       nbasisLadder: probeLadder(),
       baseUrl: import.meta.env.BASE_URL,
+      holdMs: HOLD_MS,
     };
     worker.postMessage(req);
   });
@@ -516,8 +519,9 @@ export function stressPanelHTML(): string {
         The SCF's peak footprint is <em>two</em> copies of the unique-ERI array (N⁴/8 doubles each):
         one inside the WASM module's linear memory, plus the JS <code>Float64Array</code> it is
         sliced into — and wasm memory never shrinks, so both stay resident. The probe reproduces
-        exactly that pair, at each size, in tens of milliseconds instead of the tens of minutes an
-        SCF would take. It reports which half gave out, because the two answer different questions:
+        exactly that pair, at each size, and holds it resident for 3 s — seconds instead of the tens
+        of minutes an SCF would take, but long enough that a pressure-based tab killer gets the same
+        chance at it. It reports which half gave out, because the two answer different questions:
         failing <em>inside wasm</em> means the 4 GiB address space ran out (what stops a desktop),
         while failing <em>on the JS copy</em> means the device's own memory cap did (what stops a
         phone). Synthetic substitutes do not work — a lone JS array or a bare
