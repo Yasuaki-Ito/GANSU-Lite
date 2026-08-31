@@ -40,6 +40,11 @@ export interface StressPoint {
 export interface StressSummary {
   largestCompleted: { name: string; natoms: number; nbasis: number; seconds: number } | null;
   firstFailure: { name: string; natoms: number; nbasis: number | null; mode: string } | null;
+  /**
+   * Set when a timeout failure sits close enough to the budget that the reported
+   * limit is an artefact of the budget rather than a property of the device.
+   */
+  borderline: { estimatedSeconds: number; budgetSeconds: number; exponent: number } | null;
 }
 
 export interface StressOutput {
@@ -141,6 +146,9 @@ function runPoint(
     // whether the job was still working or had already stopped talking.
     let lastMessageAt = t0;
     let lastMessage = 'no progress reported';
+    // The worker announces the size before the expensive work starts, so a point
+    // that later times out or dies still knows how big it was.
+    let observedNbasis: number | null = null;
 
     const finish = (o: PointOutcome) => {
       if (settled) return;
@@ -151,15 +159,21 @@ function runPoint(
       resolve(o);
     };
 
-    const empty = {
-      nbasis: null, totalMs: null, scfMs: null, iterations: null, converged: null,
-      energy: null, eriBytes: null, heapUsedBytes: null, heapLimitBytes: null,
+    const eriBytesFor = (n: number) => {
+      const npair = n * (n + 1) / 2;
+      return (npair * (npair + 1) / 2) * 8;
     };
+    const partial = () => ({
+      nbasis: observedNbasis,
+      totalMs: null, scfMs: null, iterations: null, converged: null, energy: null,
+      eriBytes: observedNbasis == null ? null : eriBytesFor(observedNbasis),
+      heapUsedBytes: null, heapLimitBytes: null,
+    });
 
     const timer = setTimeout(() => {
       const silentS = (performance.now() - lastMessageAt) / 1000;
       finish({
-        ...empty,
+        ...partial(),
         status: 'timeout',
         totalMs: performance.now() - t0,
         detail:
@@ -173,6 +187,8 @@ function runPoint(
       const m = e.data;
       lastMessageAt = performance.now();
       if (m.type === 'progress') {
+        const hit = /(\d+) basis functions/.exec(m.message);
+        if (hit) observedNbasis = Number(hit[1]);
         lastMessage = m.message;
         onProgress(m.message, m.elapsedMs);
         return;
@@ -189,9 +205,9 @@ function runPoint(
       }
       if (m.type === 'error') {
         finish({
-          ...empty,
+          ...partial(),
           status: 'error',
-          nbasis: m.nbasis,
+          nbasis: m.nbasis ?? observedNbasis,
           totalMs: m.elapsedMs,
           detail: `${m.name}: ${m.message} (phase: ${m.phase})`,
         });
@@ -202,7 +218,7 @@ function runPoint(
     // Fires when the worker itself is torn down by the engine (typically OOM).
     worker.onerror = (ev) => {
       finish({
-        ...empty,
+        ...partial(),
         status: 'worker-died',
         totalMs: performance.now() - t0,
         detail: ev.message || 'worker terminated by the browser',
@@ -234,8 +250,10 @@ export interface ProbeRow { nbasis: number; bytes: number; ok: boolean; ms: numb
 function probeLadder(): number[] {
   const xs = new Set<number>();
   for (const n of STRESS_SERIES[0].ladder) xs.add(n * 25);
-  for (const nb of [550, 600, 650, 700]) xs.add(nb);
-  return [...xs].sort((a, b) => a - b);
+  // Stop at 300 basis functions (a 7.6 GB array). Past that the memory answer is
+  // moot: the SCF itself would run for well over an hour at N⁴, so there is no
+  // configuration in which holding the array is the thing standing in the way.
+  return [...xs].filter(nb => nb <= 300).sort((a, b) => a - b);
 }
 
 function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
@@ -324,9 +342,10 @@ async function doProbe(): Promise<void> {
             failed: `allocation failed outright at ${stopper.nbasis}`,
             skipped: `the ladder ran past the probe cap at ${stopper.nbasis}`,
             resident: '' }[stopper.verdict]
-        : 'the ladder was exhausted without hitting a ceiling';
+        : 'the probe ladder topped out at 300 basis functions without hitting a ceiling — ' +
+          'past that the N⁴ SCF cost, not memory, is what stops you';
       summary.textContent =
-        `Memory ceiling: ${last.nbasis} basis functions — a ${humanBytes(last.bytes)} ERI array ` +
+        `Memory ceiling: ${stopper ? '' : '≥ '}${last.nbasis} basis functions — a ${humanBytes(last.bytes)} ERI array ` +
         `still resident in RAM (${last.gbPerSec.toFixed(1)} GB/s); ${why}.`;
     }
   }
@@ -336,11 +355,39 @@ async function doProbe(): Promise<void> {
 
 // ── Summary ──
 
-function summarize(points: StressPoint[]): StressSummary {
+/**
+ * How long the first failing point would have needed, extrapolated from the last
+ * two completed points. SCF cost here scales as roughly N^5 once memory traffic
+ * is included, so the exponent is fitted from the data rather than assumed.
+ */
+function estimateFailingTime(ok: StressPoint[], bad: StressPoint): { seconds: number; exponent: number } | null {
+  if (ok.length < 2 || bad.nbasis == null) return null;
+  const a = ok[ok.length - 2], b = ok[ok.length - 1];
+  if (a.nbasis == null || b.nbasis == null || a.totalMs == null || b.totalMs == null) return null;
+  if (a.nbasis >= b.nbasis || b.nbasis >= bad.nbasis || a.totalMs <= 0) return null;
+  const exponent = Math.log(b.totalMs / a.totalMs) / Math.log(b.nbasis / a.nbasis);
+  if (!Number.isFinite(exponent) || exponent <= 0) return null;
+  const ms = b.totalMs * Math.pow(bad.nbasis / b.nbasis, exponent);
+  return { seconds: ms / 1000, exponent };
+}
+
+function summarize(points: StressPoint[], budgetSeconds: number): StressSummary {
   const ok = points.filter(p => p.status === 'ok');
   const last = ok.length ? ok[ok.length - 1] : null;
   const bad = points.find(p => p.status !== 'ok') ?? null;
+
+  let borderline: StressSummary['borderline'] = null;
+  if (bad && bad.status === 'timeout') {
+    const est = estimateFailingTime(ok, bad);
+    // Within 2x of the budget means a modestly larger budget would very likely
+    // have let this point through — the rung is not really beyond the device.
+    if (est && est.seconds < 2 * budgetSeconds) {
+      borderline = { estimatedSeconds: est.seconds, budgetSeconds, exponent: est.exponent };
+    }
+  }
+
   return {
+    borderline,
     largestCompleted: last && last.nbasis != null && last.totalMs != null
       ? { name: last.name, natoms: last.natoms, nbasis: last.nbasis, seconds: +(last.totalMs / 1000).toFixed(1) }
       : null,
@@ -423,6 +470,8 @@ export function stressPanelHTML(): string {
         desktop OS will back a multi-gigabyte array with the page file and report success while
         thrashing — so the probe writes one value per page and stops when commit throughput
         collapses against the small-array baseline. Only sizes marked <em>resident in RAM</em> count.
+        The probe stops at 300 basis functions and stays inside half of the reported device memory,
+        so it can never push the machine into a paging storm.
       </p>
       <button id="cb-stress-probe">Probe memory ceiling</button>
       <div id="cb-probe-section" style="display:none;margin-top:10px">
@@ -625,7 +674,7 @@ async function runStress(getBackendLabel: () => string): Promise<void> {
     basis: BASIS_NAME,
     budgetSeconds: budgetS,
     points: state.points,
-    summary: summarize(state.points),
+    summary: summarize(state.points, budgetS),
     memoryProbe: probeRows,
     toolUrl: location.href,
   };
@@ -698,6 +747,15 @@ function renderSummary(): void {
   const sep = '|---|---|---|---|---|---|---|';
   const notes: string[] = [];
   if (!s.firstFailure) notes.push('# The ladder finished without a failure — extend it to find the limit.');
+  if (s.borderline) {
+    const b = s.borderline;
+    notes.push(
+      `# BORDERLINE: ${s.firstFailure?.name} is extrapolated to need ~${b.estimatedSeconds.toFixed(0)} s ` +
+      `(fitted N^${b.exponent.toFixed(1)}) against a ${b.budgetSeconds} s budget.`,
+      `# The reported limit reflects the budget, not the device. Re-run with the budget ` +
+      `raised to at least ${Math.ceil(b.estimatedSeconds * 1.5 / 60) * 60} s before using this row.`,
+    );
+  }
   const nonConverged = state.points.filter(p => p.status === 'ok' && p.converged === false);
   if (nonConverged.length) notes.push(`# SCF did not converge for: ${nonConverged.map(p => p.name).join(', ')}`);
   pre.textContent = [header, sep, paperRow(), ...notes].join('\n');

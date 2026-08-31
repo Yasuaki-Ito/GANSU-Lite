@@ -119,9 +119,11 @@ function probeMemory(req: MemoryProbeRequest): void {
   const post = (m: StressResponse) => (self as unknown as Worker).postMessage(m);
 
   const nav = navigator as Navigator & { deviceMemory?: number };
-  // deviceMemory is coarse and capped at 8 by browsers; treat it as a hint only.
-  const hintGB = nav.deviceMemory ?? 8;
-  const hardCapBytes = Math.max(4, hintGB * 2) * 1024 ** 3;
+  // Stay well inside physical RAM: anything above it is swap by definition, and a
+  // browser reporting 32 GB would otherwise let the probe commit tens of GB and
+  // drag the whole machine into a paging storm.
+  const hintGB = nav.deviceMemory ?? 4;
+  const hardCapBytes = Math.min(Math.max(1, hintGB * 0.5), 8) * 1024 ** 3;
 
   let baselineGBps = 0;
 
