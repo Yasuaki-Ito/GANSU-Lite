@@ -25,14 +25,20 @@ export interface MemoryProbeRequest {
 }
 
 export type ProbeVerdict = 'ok' | 'failed' | 'unavailable';
+/** Which half of the real peak footprint the probe was holding when it failed. */
+export type ProbeStage = 'wasm' | 'js-copy';
 
 export interface MemoryProbeResult {
   type: 'probe-result';
   nbasis: number;
+  /** Size of one ERI array. The SCF holds two of these at once — see peakBytes. */
   bytes: number;
+  /** What the calculation actually needs resident: the wasm array plus its JS copy. */
+  peakBytes: number;
   ok: boolean;
   ms: number;
   verdict: ProbeVerdict;
+  failedStage?: ProbeStage;
   detail?: string;
 }
 
@@ -136,19 +142,20 @@ async function loadWasmAllocator(baseUrl: string): Promise<{
 }
 
 /**
- * Largest ERI array the WASM backend can actually allocate.
+ * Largest system the WASM backend can actually hold.
  *
- * This asks the real module's allocator for the real array, inside the real
- * linear memory — which is the only test that matches what the SCF does. Two
- * cheaper-looking probes were tried first and both lie: a JS `Float64Array` and
- * a bare `WebAssembly.Memory` each report success at 225 basis functions, where
- * the actual SCF traps with `RuntimeError: unreachable` (the Rust allocator
- * aborting). The ceiling is wasm32's 4 GiB linear memory minus everything else
- * the module is holding, not the machine's RAM — a 32 GB desktop and a phone hit
- * the same architectural wall.
+ * This reproduces the calculation's real peak footprint, which is *two* copies of
+ * the ERI array, not one: the Rust side allocates it inside wasm linear memory,
+ * then `readF64` slices it into a JS `Float64Array` — and wasm linear memory
+ * never shrinks, so both stay resident for the rest of the SCF.
  *
- * It is also fast — tens of milliseconds per size — so the hard limit can be
- * measured even on devices where the time budget stops the ladder long before.
+ * Getting this wrong is not academic. An earlier version probed only the wasm
+ * allocation and reported the same 200-basis-function ceiling on an iPhone as on
+ * a 32 GB desktop, while the iPhone's tab was in fact being killed at 175 — the
+ * missing JS copy was the difference. Two ceilings therefore exist and the probe
+ * has to distinguish them:
+ *   - wasm32's 4 GiB address space, which is what stops a desktop; and
+ *   - the device's own memory cap, which is what stops a phone.
  */
 async function probeMemory(req: MemoryProbeRequest): Promise<void> {
   const post = (m: StressResponse) => (self as unknown as Worker).postMessage(m);
@@ -156,7 +163,7 @@ async function probeMemory(req: MemoryProbeRequest): Promise<void> {
   const w = await loadWasmAllocator(req.baseUrl);
   if (!w) {
     post({
-      type: 'probe-result', nbasis: 0, bytes: 0, ok: false, ms: 0, verdict: 'unavailable',
+      type: 'probe-result', nbasis: 0, bytes: 0, peakBytes: 0, ok: false, ms: 0, verdict: 'unavailable',
       detail: 'could not instantiate the WASM module — this device runs the JS backend, whose ceiling is device RAM rather than the wasm32 address space',
     });
     post({ type: 'probe-done' });
@@ -166,22 +173,37 @@ async function probeMemory(req: MemoryProbeRequest): Promise<void> {
   for (const nb of req.nbasisLadder) {
     const bytes = eriBytesFor(nb);
     const t0 = performance.now();
+    let stage: ProbeStage = 'wasm';
+    let ptr = 0;
+    let jsCopy: Float64Array | null = null;
     try {
-      const ptr = w.malloc(bytes, 8) >>> 0;
+      ptr = w.malloc(bytes, 8) >>> 0;
       if (!ptr) throw new Error('allocator returned null');
       // memory.buffer is detached by any growth, so take the view after malloc.
       const view = new Float64Array(w.memory.buffer, ptr, bytes / 8);
       for (let i = 0; i < view.length; i += 512) view[i] = 1;
-      if (!Number.isFinite(view[0])) throw new Error('unexpected buffer contents');
-      w.free(ptr, bytes, 8);
-      post({ type: 'probe-result', nbasis: nb, bytes, ok: true, ms: performance.now() - t0, verdict: 'ok' });
+
+      // The JS-side copy the real code makes, held at the same time.
+      stage = 'js-copy';
+      jsCopy = new Float64Array(bytes / 8);
+      for (let i = 0; i < jsCopy.length; i += 512) jsCopy[i] = view[i];
+      if (!Number.isFinite(jsCopy[0])) throw new Error('unexpected buffer contents');
+
+      post({
+        type: 'probe-result', nbasis: nb, bytes, peakBytes: bytes * 2,
+        ok: true, ms: performance.now() - t0, verdict: 'ok',
+      });
     } catch (err) {
       post({
-        type: 'probe-result', nbasis: nb, bytes, ok: false, ms: performance.now() - t0, verdict: 'failed',
+        type: 'probe-result', nbasis: nb, bytes, peakBytes: bytes * 2,
+        ok: false, ms: performance.now() - t0, verdict: 'failed', failedStage: stage,
         detail: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
       });
       // A Rust abort leaves the module poisoned; nothing past this point is meaningful.
       break;
+    } finally {
+      jsCopy = null;
+      if (ptr) { try { w.free(ptr, bytes, 8); } catch { /* poisoned module */ } }
     }
   }
   post({ type: 'probe-done' });

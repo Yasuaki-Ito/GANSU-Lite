@@ -11,7 +11,7 @@
 
 import { gatherDeviceInfo, type DeviceInfo } from '../core/deviceInfo';
 import { STRESS_SERIES, type StressSeries } from '../core/stressGeometries';
-import type { StressRequest, StressResponse, MemoryProbeRequest, ProbeVerdict } from '../core/stressWorker';
+import type { StressRequest, StressResponse, MemoryProbeRequest, ProbeVerdict, ProbeStage } from '../core/stressWorker';
 
 const STORAGE_KEY = 'gansu-stress-v1';
 const PROBE_KEY = 'gansu-stress-probe-v1';
@@ -69,7 +69,11 @@ interface Checkpoint {
   budgetSeconds: number;
   points: StressPoint[];
   /** Non-null while a point is being computed — a leftover means the tab died. */
-  inFlight: { n: number; name: string; natoms: number; startedAt: number } | null;
+  inFlight: {
+    n: number; name: string; natoms: number; startedAt: number;
+    /** Recorded as soon as the worker reports it, so a tab crash still knows the size. */
+    nbasis: number | null;
+  } | null;
 }
 
 // ── Persistence ──
@@ -244,7 +248,7 @@ function runPoint(
 
 // ── Memory-ceiling probe ──
 
-export interface ProbeRow { nbasis: number; bytes: number; ok: boolean; ms: number; verdict: ProbeVerdict; detail?: string; }
+export interface ProbeRow { nbasis: number; bytes: number; peakBytes: number; ok: boolean; ms: number; verdict: ProbeVerdict; failedStage?: ProbeStage; detail?: string; }
 
 /**
  * Basis-function counts to probe. The worker stops at the first size its
@@ -268,7 +272,9 @@ function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
       const m = e.data;
       if (m.type === 'probe-result') {
         const row: ProbeRow = {
-          nbasis: m.nbasis, bytes: m.bytes, ok: m.ok, ms: m.ms, verdict: m.verdict,
+          nbasis: m.nbasis, bytes: m.bytes, peakBytes: m.peakBytes,
+          ok: m.ok, ms: m.ms, verdict: m.verdict,
+          ...(m.failedStage ? { failedStage: m.failedStage } : {}),
           ...(m.detail ? { detail: m.detail } : {}),
         };
         rows.push(row);
@@ -290,14 +296,17 @@ function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
 
 function appendProbeRow(body: HTMLTableSectionElement, r: ProbeRow): void {
   const good = r.verdict === 'ok';
-  const label = {
-    ok: 'allocated in WASM memory',
-    failed: 'ALLOCATION FAILED',
-    unavailable: 'WASM unavailable',
-  }[r.verdict];
+  const label = r.verdict === 'ok'
+    ? 'held: wasm array + JS copy'
+    : r.verdict === 'unavailable'
+      ? 'WASM unavailable'
+      : r.failedStage === 'js-copy'
+        ? 'FAILED on the JS copy — device memory cap'
+        : 'FAILED in wasm — address space';
   const tr = document.createElement('tr');
   tr.innerHTML =
     `<td class="num">${r.nbasis || '—'}</td><td class="num">${r.bytes ? humanBytes(r.bytes) : '—'}</td>` +
+    `<td class="num">${r.peakBytes ? humanBytes(r.peakBytes) : '—'}</td>` +
     `<td class="num">${r.ms.toFixed(0)}</td>` +
     `<td${good ? '' : ' class="cb-err"'}>${label}` +
     `${r.detail ? `<br><span class="cb-err">${escapeHtml(r.detail)}</span>` : ''}</td>`;
@@ -346,14 +355,17 @@ async function doProbe(): Promise<void> {
     } else if (!last) {
       summary.textContent = 'Could not allocate even the smallest probe array — something is wrong.';
     } else {
-      const why = stopper
-        ? { failed: `the allocator refused ${stopper.nbasis} (${humanBytes(stopper.bytes)})`,
-            unavailable: '',
-            ok: '' }[stopper.verdict]
-        : 'the probe ladder topped out at 300 basis functions without hitting a ceiling';
+      const why = !stopper
+        ? 'the probe ladder topped out at 300 basis functions without hitting a ceiling'
+        : stopper.failedStage === 'js-copy'
+          ? `${stopper.nbasis} failed while taking the JS copy — this device's own memory cap, ` +
+            `not the wasm32 address space, is what stops it (needed ${humanBytes(stopper.peakBytes)})`
+          : `${stopper.nbasis} failed inside wasm — the module's 4 GiB address space ran out ` +
+            `(needed ${humanBytes(stopper.bytes)} in one block)`;
       summary.textContent =
-        `WASM memory ceiling: ${stopper ? '' : '≥ '}${last.nbasis} basis functions — ` +
-        `a ${humanBytes(last.bytes)} ERI array allocates inside the module's linear memory; ${why}.`;
+        `Memory ceiling: ${stopper ? '' : '≥ '}${last.nbasis} basis functions — the SCF's peak of ` +
+        `${humanBytes(last.peakBytes)} (a ${humanBytes(last.bytes)} ERI array in wasm plus its JS copy) ` +
+        `is held successfully; ${why}.`;
     }
   }
   setStatus('memory probe done');
@@ -501,19 +513,20 @@ export function stressPanelHTML(): string {
       </div>
       <h3 style="font-size:0.95rem;margin:16px 0 4px">Hard memory ceiling</h3>
       <p class="cb-note">
-        The SCF's dominant allocation is the unique-ERI array (N⁴/8 doubles), and it lives inside
-        the WASM module's linear memory. The probe asks the module's own allocator for exactly that
-        array, at each size, and writes across it — tens of milliseconds per size instead of the
-        tens of minutes an SCF at that size would take. Synthetic substitutes do not work: a JS
-        <code>Float64Array</code> and a bare <code>WebAssembly.Memory</code> both report success at
-        225 basis functions, where the real calculation traps. The ceiling is wasm32's 4 GiB address
-        space minus what the module already holds, so it is a property of the engine rather than of
-        the machine's RAM.
+        The SCF's peak footprint is <em>two</em> copies of the unique-ERI array (N⁴/8 doubles each):
+        one inside the WASM module's linear memory, plus the JS <code>Float64Array</code> it is
+        sliced into — and wasm memory never shrinks, so both stay resident. The probe reproduces
+        exactly that pair, at each size, in tens of milliseconds instead of the tens of minutes an
+        SCF would take. It reports which half gave out, because the two answer different questions:
+        failing <em>inside wasm</em> means the 4 GiB address space ran out (what stops a desktop),
+        while failing <em>on the JS copy</em> means the device's own memory cap did (what stops a
+        phone). Synthetic substitutes do not work — a lone JS array or a bare
+        <code>WebAssembly.Memory</code> both claim success where the real calculation dies.
       </p>
       <button id="cb-stress-probe">Probe memory ceiling</button>
       <div id="cb-probe-section" style="display:none;margin-top:10px">
         <table class="cb-results-table" style="font-size:0.8rem;max-width:520px">
-          <thead><tr><th class="num">Basis fns</th><th class="num">ERI array</th><th class="num">ms</th><th>Result</th></tr></thead>
+          <thead><tr><th class="num">Basis fns</th><th class="num">ERI array</th><th class="num">Peak held</th><th class="num">ms</th><th>Result</th></tr></thead>
           <tbody id="cb-probe-body"></tbody>
         </table>
         <p id="cb-probe-summary" class="cb-note"></p>
@@ -600,10 +613,13 @@ function recoverCrashedRun(): void {
   if (cp.inFlight) {
     const f = cp.inFlight;
     if (!state.points.some(p => p.n === f.n)) {
+      const nb = f.nbasis ?? null;
+      const npair = nb == null ? null : nb * (nb + 1) / 2;
       state.points.push({
-        n: f.n, name: f.name, natoms: f.natoms, nbasis: null,
+        n: f.n, name: f.name, natoms: f.natoms, nbasis: nb,
         status: 'tab-crash', totalMs: null, scfMs: null, iterations: null,
-        converged: null, energy: null, eriBytes: null,
+        converged: null, energy: null,
+        eriBytes: npair == null ? null : (npair * (npair + 1) / 2) * 8,
         heapUsedBytes: null, heapLimitBytes: null,
         detail: 'tab died while this point was running',
       });
@@ -680,16 +696,26 @@ async function runStress(getBackendLabel: () => string): Promise<void> {
     const name = series.name(n);
     const natoms = series.natoms(n);
 
-    saveCheckpoint({
+    const inFlight = { n, name, natoms, startedAt: Date.now(), nbasis: null as number | null };
+    const checkpoint = () => saveCheckpoint({
       seriesId: series.id, method, budgetSeconds: budgetS,
-      points: state.points,
-      inFlight: { n, name, natoms, startedAt: Date.now() },
+      points: state.points, inFlight,
     });
+    checkpoint();
 
     setStatus(`${name} — starting…`);
     const outcome = await runPoint(
       series.xyz(n), basisGBS, budgetMs, dft,
-      (msg, ms) => setStatus(`${name} — ${msg} (${(ms / 1000).toFixed(1)} s)`),
+      (msg, ms) => {
+        if (inFlight.nbasis == null) {
+          const hit = /(\d+) basis functions/.exec(msg);
+          // Persist the size before the expensive part starts: on a device that
+          // dies outright (iOS kills the whole tab) this is the only record of
+          // how big the fatal point was.
+          if (hit) { inFlight.nbasis = Number(hit[1]); checkpoint(); }
+        }
+        setStatus(`${name} — ${msg} (${(ms / 1000).toFixed(1)} s)`);
+      },
       w => { state.activeWorker = w; },
     );
 
