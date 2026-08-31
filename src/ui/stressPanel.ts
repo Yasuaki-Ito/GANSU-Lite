@@ -95,6 +95,12 @@ function clearCheckpoint(): void {
   try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
 }
 
+/** Bytes of the unique-ERI array for `n` basis functions: (npair(npair+1)/2) doubles. */
+function eriBytesFor(n: number): number {
+  const npair = n * (n + 1) / 2;
+  return (npair * (npair + 1) / 2) * 8;
+}
+
 // ── Formatting ──
 
 function humanBytes(b: number | null): string {
@@ -167,10 +173,6 @@ function runPoint(
       resolve(o);
     };
 
-    const eriBytesFor = (n: number) => {
-      const npair = n * (n + 1) / 2;
-      return (npair * (npair + 1) / 2) * 8;
-    };
     const partial = () => ({
       nbasis: observedNbasis,
       totalMs: null, scfMs: null, iterations: null, converged: null, energy: null,
@@ -265,31 +267,69 @@ function probeLadder(): number[] {
   return [...xs].filter(nb => nb <= 300).sort((a, b) => a - b);
 }
 
-function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
+/**
+ * Drives the probe worker.
+ *
+ * A worker the browser kills for memory does not report anything — it just stops
+ * existing. Treating that as a clean finish (the first version did) loses the
+ * single most interesting result: the summary then claimed the ladder had been
+ * exhausted when it had in fact died two sizes in. So an `error` event, or a
+ * silent worker, is turned into an explicit failed row for the size that was
+ * being probed when the lights went out.
+ */
+function runMemoryProbe(ladder: number[], onRow: (r: ProbeRow) => void): Promise<void> {
   return new Promise((resolve) => {
     const worker = new Worker(new URL('../core/stressWorker.ts', import.meta.url), { type: 'module' });
-    const rows: ProbeRow[] = [];
-    const done = () => { worker.terminate(); resolve(rows); };
+    let received = 0;
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      worker.terminate();
+      resolve();
+    };
+
+    const died = (why: string) => {
+      if (settled) return;
+      if (received < ladder.length) {
+        const nb = ladder[received];
+        const bytes = eriBytesFor(nb);
+        onRow({
+          nbasis: nb, bytes, peakBytes: bytes * 2, ok: false, ms: 0,
+          verdict: 'failed', failedStage: 'js-copy',
+          detail: `the browser killed the worker while it was holding this size — ` +
+                  `the device could not keep ${humanBytes(bytes * 2)} resident (${why})`,
+        });
+      }
+      finish();
+    };
+
+    // Nothing at all for a whole hold period plus slack means the worker is gone
+    // without having fired an error event, which some engines do on OOM.
+    const watchdog = setTimeout(() => died('no response'), HOLD_MS * ladder.length + 120000);
+
     worker.onmessage = (e: MessageEvent<StressResponse>) => {
       const m = e.data;
       if (m.type === 'probe-result') {
-        const row: ProbeRow = {
+        received++;
+        onRow({
           nbasis: m.nbasis, bytes: m.bytes, peakBytes: m.peakBytes,
           ok: m.ok, ms: m.ms, verdict: m.verdict,
           ...(m.failedStage ? { failedStage: m.failedStage } : {}),
           ...(m.detail ? { detail: m.detail } : {}),
-        };
-        rows.push(row);
-        onRow(row);
+        });
         return;
       }
-      if (m.type === 'probe-done') done();
+      if (m.type === 'probe-done') finish();
     };
-    // If the engine kills the worker mid-probe, the rows gathered so far still stand.
-    worker.onerror = () => done();
+
+    worker.onerror = (ev) => died(ev.message || 'worker error');
+
     const req: MemoryProbeRequest = {
       type: 'memory-probe',
-      nbasisLadder: probeLadder(),
+      nbasisLadder: ladder,
       baseUrl: import.meta.env.BASE_URL,
       holdMs: HOLD_MS,
     };
@@ -308,7 +348,8 @@ function appendProbeRow(body: HTMLTableSectionElement, r: ProbeRow): void {
         : 'FAILED in wasm — address space';
   const tr = document.createElement('tr');
   tr.innerHTML =
-    `<td class="num">${r.nbasis || '—'}</td><td class="num">${r.bytes ? humanBytes(r.bytes) : '—'}</td>` +
+    `<td class="num">${r.nbasis || '—'}</td>` +
+    `<td class="num">${r.bytes ? humanBytes(r.bytes) : '—'}</td>` +
     `<td class="num">${r.peakBytes ? humanBytes(r.peakBytes) : '—'}</td>` +
     `<td class="num">${r.ms.toFixed(0)}</td>` +
     `<td${good ? '' : ' class="cb-err"'}>${label}` +
@@ -339,7 +380,8 @@ async function doProbe(): Promise<void> {
   probeRows = [];
   setStatus('probing memory ceiling…');
 
-  await runMemoryProbe((r) => {
+  const ladder = probeLadder();
+  await runMemoryProbe(ladder, (r) => {
     probeRows.push(r);
     saveProbeRows(probeRows);
     if (body) appendProbeRow(body, r);
@@ -359,7 +401,7 @@ async function doProbe(): Promise<void> {
       summary.textContent = 'Could not allocate even the smallest probe array — something is wrong.';
     } else {
       const why = !stopper
-        ? 'the probe ladder topped out at 300 basis functions without hitting a ceiling'
+        ? `the ladder ran out at ${last.nbasis} basis functions without the allocator refusing`
         : stopper.failedStage === 'js-copy'
           ? `${stopper.nbasis} failed while taking the JS copy — this device's own memory cap, ` +
             `not the wasm32 address space, is what stops it (needed ${humanBytes(stopper.peakBytes)})`
