@@ -21,6 +21,8 @@ import { computeERIs } from './core/integrals2e';
 import { ERIStored } from './core/eri';
 import { Matrix } from './linalg/matrix';
 import type { EriBackend } from './core/hf';
+import { gatherDeviceInfo, getInitialLoadMs, type DeviceInfo } from './core/deviceInfo';
+import { stressPanelHTML, wireStressPanel } from './ui/stressPanel';
 
 // ── Constants ──
 const RUNS_TOTAL = 4;
@@ -147,40 +149,7 @@ function median(xs: number[]): number {
   return m % 2 === 1 ? s[(m - 1) / 2] : (s[m/2 - 1] + s[m/2]) / 2;
 }
 
-// ── Device info ──
-interface DeviceInfo {
-  ua: string;
-  platform: string;
-  deviceMemoryGB: number | null;
-  hardwareConcurrency: number;
-  screen: string;
-  language: string;
-  timestamp: string;
-}
-
-function gatherDeviceInfo(): DeviceInfo {
-  const nav = navigator as Navigator & { deviceMemory?: number };
-  return {
-    ua: nav.userAgent,
-    platform: nav.platform ?? 'unknown',
-    deviceMemoryGB: nav.deviceMemory ?? null,
-    hardwareConcurrency: nav.hardwareConcurrency ?? 0,
-    screen: `${screen.width}×${screen.height}`,
-    language: nav.language || 'unknown',
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// ── Initial load time ──
-function getInitialLoadMs(): number | null {
-  try {
-    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    if (!nav) return null;
-    return Math.round(nav.loadEventEnd - nav.fetchStart);
-  } catch {
-    return null;
-  }
-}
+// ── Device info: see ./core/deviceInfo (shared with the stress panel) ──
 
 // ── Direct WASM binary loader (for backend comparison only).
 //    Loads a specific wasm_eri binary and exposes its ERI + Fock functions.
@@ -505,6 +474,7 @@ interface BenchOutput {
 // ── UI ──
 const root = document.getElementById('app')!;
 let allResults: BenchOutput | null = null;
+let detectedBackendLabel = 'detecting…';
 
 function render(): void {
   const dev = gatherDeviceInfo();
@@ -575,6 +545,8 @@ function render(): void {
         </div>
       </section>
 
+      ${stressPanelHTML()}
+
       <section class="cb-panel" id="cb-results" style="display:none">
         <h2>Results</h2>
         <table class="cb-results-table">
@@ -612,7 +584,10 @@ function render(): void {
   document.getElementById('cb-download-json')?.addEventListener('click', () => download('benchmark.json', JSON.stringify(allResults, null, 2), 'application/json'));
   document.getElementById('cb-download-csv')?.addEventListener('click', () => download('benchmark.csv', toCSV(allResults), 'text/csv'));
 
+  wireStressPanel(() => detectedBackendLabel);
+
   selectBestBackend().then(({ label }) => {
+    detectedBackendLabel = label;
     const el = document.getElementById('cb-backend');
     if (el) el.textContent = label;
   });
@@ -799,6 +774,11 @@ function injectStyles(): void {
     .cb-export { margin-bottom: 12px; }
     .cb-json pre { background: var(--color-input); padding: 12px; border-radius: 6px; font-size: 0.78rem; overflow-x: auto; max-height: 400px; }
     .cb-err { color: var(--color-error, #e05050); font-size: 0.75rem; }
+    .cb-stress-controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; margin-bottom: 4px; }
+    .cb-stress-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--color-text-dim); }
+    .cb-stress-controls select, .cb-stress-controls input { background: var(--color-input); color: var(--color-text); border: 1px solid var(--color-border); border-radius: 5px; padding: 5px 8px; font-size: 0.85rem; }
+    .cb-stress-controls input[type="text"] { min-width: 260px; font-family: 'Cascadia Code', monospace; font-size: 0.78rem; }
+    .cb-stress-row { background: var(--color-input); padding: 10px 12px; border-radius: 6px; font-size: 0.75rem; overflow-x: auto; white-space: pre; margin: 0 0 10px; }
   `;
   document.head.appendChild(s);
 }
