@@ -357,7 +357,32 @@ async function doProbe(): Promise<void> {
     }
   }
   setStatus('memory probe done');
+  if (state.output) renderSummary();
   if (btn) btn.disabled = false;
+}
+
+// ── Practical limit, derived after the fact ──
+
+/**
+ * The largest system that finished inside `thresholdSeconds`, read straight off
+ * the recorded timings.
+ *
+ * The run budget only decides how far up the ladder we get; it should not decide
+ * the reported limit. Ladder rungs are ≈2.1x apart, so any fixed budget sits
+ * awkwardly close to a rung on *some* device, and comparing four devices each
+ * measured against its own awkward budget is not a comparison at all. Recording
+ * the curve and applying one patience threshold to all four afterwards removes
+ * the artefact entirely — and lets the threshold be restated later without
+ * re-running anything.
+ */
+export function limitAtThreshold(points: StressPoint[], thresholdSeconds: number): StressPoint | null {
+  let best: StressPoint | null = null;
+  for (const p of points) {
+    if (p.status !== 'ok' || p.totalMs == null) continue;
+    if (p.totalMs / 1000 > thresholdSeconds) break;
+    best = p;
+  }
+  return best;
 }
 
 // ── Summary ──
@@ -496,6 +521,13 @@ export function stressPanelHTML(): string {
 
       <div id="cb-stress-summary" style="display:none">
         <h3 style="font-size:0.95rem;margin:14px 0 6px">Row for the paper table</h3>
+        <label style="font-size:0.78rem;color:var(--color-text-dim);display:block;margin-bottom:8px">
+          Practical limit measured at a patience threshold of
+          <input id="cb-stress-threshold" type="number" min="1" max="3600" step="10" value="180"
+                 style="width:80px;background:var(--color-input);color:var(--color-text);border:1px solid var(--color-border);border-radius:5px;padding:3px 6px">
+          s — applied to the recorded timings, so every device can be compared at the
+          same threshold no matter what budget its ladder ran with.
+        </label>
         <pre id="cb-stress-row" class="cb-stress-row"></pre>
         <button id="cb-stress-copy-row">Copy row</button>
         <button id="cb-stress-copy-json">Copy JSON</button>
@@ -538,6 +570,7 @@ export function wireStressPanel(getBackendLabel: () => string): void {
   });
 
   $('cb-stress-probe')?.addEventListener('click', () => { void doProbe(); });
+  $('cb-stress-threshold')?.addEventListener('input', renderSummary);
   $('cb-stress-copy-row')?.addEventListener('click', () => copy(paperRow()));
   $('cb-stress-copy-json')?.addEventListener('click', () => copy(JSON.stringify(state.output, null, 2)));
   $('cb-stress-download-json')?.addEventListener('click', () =>
@@ -722,19 +755,32 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
 
+function currentThreshold(): number {
+  const el = document.getElementById('cb-stress-threshold') as HTMLInputElement | null;
+  const v = Number(el?.value);
+  return Number.isFinite(v) && v > 0 ? v : 180;
+}
+
 function paperRow(): string {
   const o = state.output;
   if (!o) return '';
+  const threshold = currentThreshold();
+  const atT = limitAtThreshold(o.points, threshold);
   const lc = o.summary.largestCompleted;
   const ff = o.summary.firstFailure;
+  const probe = probeRows.filter(r => r.verdict === 'ok');
+  const ceiling = probe.length ? probe[probe.length - 1].nbasis : null;
+  const probeStopper = probeRows.find(r => r.verdict === 'failed');
+
   const cells = [
     deviceShortName(o.device),
-    lc ? lc.name : '—',
-    lc ? String(lc.natoms) : '—',
-    lc ? String(lc.nbasis) : '—',
-    lc ? lc.seconds.toFixed(1) : '—',
-    ff ? ff.name : '(no failure in ladder)',
-    ff ? ff.mode : '—',
+    atT ? atT.name : '—',
+    atT ? String(atT.natoms) : '—',
+    atT?.nbasis != null ? String(atT.nbasis) : '—',
+    atT && atT.totalMs != null ? (atT.totalMs / 1000).toFixed(1) : '—',
+    lc && (atT?.nbasis == null || lc.nbasis > atT.nbasis) ? `${lc.name} (${lc.seconds}s)` : '—',
+    ff ? `${ff.name}: ${ff.mode}` : '(no failure in ladder)',
+    ceiling == null ? '(probe not run)' : `${probeStopper ? '' : '≥'}${ceiling}`,
   ];
   return `| ${cells.join(' | ')} |`;
 }
@@ -755,26 +801,39 @@ function renderSummary(): void {
   if (!box || !pre || !state.output) return;
   box.style.display = '';
   const s = state.output.summary;
-  const header = '| Device | Largest completed | Atoms | Basis fns | Time (s) | First failing size | Failure mode |';
-  const sep = '|---|---|---|---|---|---|---|';
+  const threshold = currentThreshold();
+  const header =
+    `| Device | Largest within ${threshold}s | Atoms | Basis fns | Time (s) | ` +
+    `Ran further (over threshold) | Ladder ended | WASM ceiling |`;
+  const sep = '|---|---|--:|--:|--:|---|---|--:|';
+
   const notes: string[] = [];
-  if (!s.firstFailure) notes.push('# The ladder finished without a failure — extend it to find the limit.');
+  const atT = limitAtThreshold(state.output.points, threshold);
+  if (!atT) {
+    notes.push(`# Nothing completed within ${threshold} s — lower the threshold or read the timings directly.`);
+  }
+  if (!s.firstFailure) {
+    notes.push('# The ladder finished without a failure — extend it to find where this device stops.');
+  }
   if (s.borderline) {
     const b = s.borderline;
     notes.push(
       `# ${s.firstFailure?.name} is extrapolated to need ~${b.estimatedSeconds.toFixed(0)} s ` +
-      `(fitted N^${b.exponent.toFixed(1)}) against a ${b.budgetSeconds} s budget.`,
+      `(fitted N^${b.exponent.toFixed(1)}) against the ${b.budgetSeconds} s run budget.`,
     );
     if (b.fragile) {
       notes.push(
-        `# FRAGILE: that is within 25% of the budget, so run-to-run noise alone could flip it.`,
-        `# Treat this row as "limit at a ${b.budgetSeconds} s budget", not as the device's ceiling.`,
-        `# For the device's own ceiling, re-run with the budget at ${Math.ceil(b.estimatedSeconds * 1.5 / 60) * 60} s or more.`,
+        '# FRAGILE: that is within 25% of the budget, so run-to-run noise alone could flip it.',
+        `# The "${threshold}s" column is unaffected — it is read off the recorded timings — but the`,
+        `# ladder stopped early, so re-run at ${Math.ceil(b.estimatedSeconds * 1.5 / 60) * 60} s ` +
+        'if you need rungs beyond this one.',
       );
     }
   }
   const nonConverged = state.points.filter(p => p.status === 'ok' && p.converged === false);
   if (nonConverged.length) notes.push(`# SCF did not converge for: ${nonConverged.map(p => p.name).join(', ')}`);
+  if (!probeRows.length) notes.push('# Memory ceiling not measured — press "Probe memory ceiling".');
+
   pre.textContent = [header, sep, paperRow(), ...notes].join('\n');
 }
 
