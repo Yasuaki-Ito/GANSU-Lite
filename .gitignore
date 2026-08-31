@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build output (docs/ is the committed, published build; dist/ is not used)
+dist/
+*.tsbuildinfo
+
+# Rust / wasm-pack
+wasm-eri/target/
+wasm-eri/pkg/
+wasm-eri/pkg-simd/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
