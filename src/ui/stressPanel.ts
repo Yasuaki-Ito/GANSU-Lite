@@ -11,9 +11,10 @@
 
 import { gatherDeviceInfo, type DeviceInfo } from '../core/deviceInfo';
 import { STRESS_SERIES, type StressSeries } from '../core/stressGeometries';
-import type { StressRequest, StressResponse } from '../core/stressWorker';
+import type { StressRequest, StressResponse, MemoryProbeRequest, ProbeVerdict } from '../core/stressWorker';
 
 const STORAGE_KEY = 'gansu-stress-v1';
+const PROBE_KEY = 'gansu-stress-probe-v1';
 const DEFAULT_BUDGET_S = 180;
 const BASIS_NAME = '6-31g(d,p)';
 
@@ -51,6 +52,7 @@ export interface StressOutput {
   budgetSeconds: number;
   points: StressPoint[];
   summary: StressSummary;
+  memoryProbe: ProbeRow[];
   toolUrl: string;
 }
 
@@ -185,13 +187,16 @@ function runPoint(
         });
         return;
       }
-      finish({
-        ...empty,
-        status: 'error',
-        nbasis: m.nbasis,
-        totalMs: m.elapsedMs,
-        detail: `${m.name}: ${m.message} (phase: ${m.phase})`,
-      });
+      if (m.type === 'error') {
+        finish({
+          ...empty,
+          status: 'error',
+          nbasis: m.nbasis,
+          totalMs: m.elapsedMs,
+          detail: `${m.name}: ${m.message} (phase: ${m.phase})`,
+        });
+      }
+      // probe-* messages belong to the memory probe, not to a ladder point
     };
 
     // Fires when the worker itself is torn down by the engine (typically OOM).
@@ -215,6 +220,118 @@ function runPoint(
     };
     worker.postMessage(req);
   });
+}
+
+// ── Memory-ceiling probe ──
+
+export interface ProbeRow { nbasis: number; bytes: number; ok: boolean; ms: number; gbPerSec: number; verdict: ProbeVerdict; detail?: string; }
+
+/**
+ * Basis-function counts to probe: the water ladder plus a short tail. The worker
+ * stops on its own at the first swapping or failing size, and refuses anything
+ * past its own cap, so the tail only needs to reach past a plausible ceiling.
+ */
+function probeLadder(): number[] {
+  const xs = new Set<number>();
+  for (const n of STRESS_SERIES[0].ladder) xs.add(n * 25);
+  for (const nb of [550, 600, 650, 700]) xs.add(nb);
+  return [...xs].sort((a, b) => a - b);
+}
+
+function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
+  return new Promise((resolve) => {
+    const worker = new Worker(new URL('../core/stressWorker.ts', import.meta.url), { type: 'module' });
+    const rows: ProbeRow[] = [];
+    const done = () => { worker.terminate(); resolve(rows); };
+    worker.onmessage = (e: MessageEvent<StressResponse>) => {
+      const m = e.data;
+      if (m.type === 'probe-result') {
+        const row: ProbeRow = {
+          nbasis: m.nbasis, bytes: m.bytes, ok: m.ok, ms: m.ms,
+          gbPerSec: m.gbPerSec, verdict: m.verdict,
+          ...(m.detail ? { detail: m.detail } : {}),
+        };
+        rows.push(row);
+        onRow(row);
+        return;
+      }
+      if (m.type === 'probe-done') done();
+    };
+    // If the engine kills the worker mid-probe, the rows gathered so far still stand.
+    worker.onerror = () => done();
+    const req: MemoryProbeRequest = { type: 'memory-probe', nbasisLadder: probeLadder() };
+    worker.postMessage(req);
+  });
+}
+
+function appendProbeRow(body: HTMLTableSectionElement, r: ProbeRow): void {
+  const good = r.verdict === 'resident';
+  const label = {
+    resident: 'resident in RAM',
+    swapping: 'SWAPPING — past usable memory',
+    failed: 'ALLOCATION FAILED',
+    skipped: 'skipped (past cap)',
+  }[r.verdict];
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    `<td class="num">${r.nbasis}</td><td class="num">${humanBytes(r.bytes)}</td>` +
+    `<td class="num">${r.ms.toFixed(0)}</td>` +
+    `<td class="num">${r.gbPerSec > 0 ? r.gbPerSec.toFixed(2) : '—'}</td>` +
+    `<td${good ? '' : ' class="cb-err"'}>${label}` +
+    `${r.detail ? `<br><span class="cb-err">${escapeHtml(r.detail)}</span>` : ''}</td>`;
+  body.appendChild(tr);
+}
+
+let probeRows: ProbeRow[] = [];
+
+function saveProbeRows(rows: ProbeRow[]): void {
+  try { localStorage.setItem(PROBE_KEY, JSON.stringify(rows)); } catch { /* quota / private mode */ }
+}
+
+function loadProbeRows(): ProbeRow[] {
+  try {
+    const raw = localStorage.getItem(PROBE_KEY);
+    return raw ? JSON.parse(raw) as ProbeRow[] : [];
+  } catch { return []; }
+}
+
+async function doProbe(): Promise<void> {
+  const btn = document.getElementById('cb-stress-probe') as HTMLButtonElement | null;
+  const body = document.getElementById('cb-probe-body') as HTMLTableSectionElement | null;
+  const box = document.getElementById('cb-probe-section');
+  if (btn) btn.disabled = true;
+  if (box) box.style.display = '';
+  if (body) body.innerHTML = '';
+  probeRows = [];
+  setStatus('probing memory ceiling…');
+
+  await runMemoryProbe((r) => {
+    probeRows.push(r);
+    saveProbeRows(probeRows);
+    if (body) appendProbeRow(body, r);
+  });
+
+  const resident = probeRows.filter(r => r.verdict === 'resident');
+  const stopper = probeRows.find(r => r.verdict !== 'resident');
+  const summary = document.getElementById('cb-probe-summary');
+  if (summary) {
+    const last = resident.length ? resident[resident.length - 1] : null;
+    if (!last) {
+      summary.textContent = 'Could not hold even the smallest probe array — something is wrong.';
+    } else {
+      const why = stopper
+        ? { swapping: `at ${stopper.nbasis} the array no longer fits in real memory`,
+            failed: `allocation failed outright at ${stopper.nbasis}`,
+            skipped: `the ladder ran past the probe cap at ${stopper.nbasis}`,
+            resident: '' }[stopper.verdict]
+        : 'the ladder was exhausted without hitting a ceiling';
+      summary.textContent =
+        `Memory ceiling: ${last.nbasis} basis functions — a ${humanBytes(last.bytes)} ERI array ` +
+        `still resident in RAM (${last.gbPerSec.toFixed(1)} GB/s); ${why}.`;
+    }
+  }
+  setStatus('memory probe done');
+  if (btn) btn.disabled = false;
 }
 
 // ── Summary ──
@@ -298,6 +415,24 @@ export function stressPanelHTML(): string {
           <tbody id="cb-stress-body"></tbody>
         </table>
       </div>
+      <h3 style="font-size:0.95rem;margin:16px 0 4px">Hard memory ceiling</h3>
+      <p class="cb-note">
+        The SCF's dominant allocation is the unique-ERI array (N⁴/8 doubles). Probing that
+        allocation directly finds the memory ceiling in seconds, instead of waiting out an SCF that
+        would take tens of minutes at the same size. Allocation success alone is not the test — a
+        desktop OS will back a multi-gigabyte array with the page file and report success while
+        thrashing — so the probe writes one value per page and stops when commit throughput
+        collapses against the small-array baseline. Only sizes marked <em>resident in RAM</em> count.
+      </p>
+      <button id="cb-stress-probe">Probe memory ceiling</button>
+      <div id="cb-probe-section" style="display:none;margin-top:10px">
+        <table class="cb-results-table" style="font-size:0.8rem;max-width:520px">
+          <thead><tr><th class="num">Basis fns</th><th class="num">ERI array</th><th class="num">ms</th><th class="num">GB/s</th><th>Result</th></tr></thead>
+          <tbody id="cb-probe-body"></tbody>
+        </table>
+        <p id="cb-probe-summary" class="cb-note"></p>
+      </div>
+
       <div id="cb-stress-summary" style="display:none">
         <h3 style="font-size:0.95rem;margin:14px 0 6px">Row for the paper table</h3>
         <pre id="cb-stress-row" class="cb-stress-row"></pre>
@@ -329,6 +464,8 @@ export function wireStressPanel(getBackendLabel: () => string): void {
   });
   $('cb-stress-reset')?.addEventListener('click', () => {
     clearCheckpoint();
+    try { localStorage.removeItem(PROBE_KEY); } catch { /* ignore */ }
+    probeRows = [];
     state.points = [];
     state.output = null;
     renderRows();
@@ -339,6 +476,7 @@ export function wireStressPanel(getBackendLabel: () => string): void {
     setStatus('saved progress cleared');
   });
 
+  $('cb-stress-probe')?.addEventListener('click', () => { void doProbe(); });
   $('cb-stress-copy-row')?.addEventListener('click', () => copy(paperRow()));
   $('cb-stress-copy-json')?.addEventListener('click', () => copy(JSON.stringify(state.output, null, 2)));
   $('cb-stress-download-json')?.addEventListener('click', () =>
@@ -347,6 +485,14 @@ export function wireStressPanel(getBackendLabel: () => string): void {
     download('stress-test.csv', toCSV(state.output), 'text/csv'));
 
   recoverCrashedRun();
+
+  const saved = loadProbeRows();
+  if (saved.length) {
+    probeRows = saved;
+    const box = document.getElementById('cb-probe-section');
+    const body = document.getElementById('cb-probe-body') as HTMLTableSectionElement | null;
+    if (box && body) { box.style.display = ''; for (const r of saved) appendProbeRow(body, r); }
+  }
 }
 
 /** A leftover in-flight marker means the tab died mid-point last time. */
@@ -480,6 +626,7 @@ async function runStress(getBackendLabel: () => string): Promise<void> {
     budgetSeconds: budgetS,
     points: state.points,
     summary: summarize(state.points),
+    memoryProbe: probeRows,
     toolUrl: location.href,
   };
   renderSummary();

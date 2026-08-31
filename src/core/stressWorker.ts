@@ -17,6 +17,29 @@ import { buildHF, type DFTConfig } from './builder';
 import { initWasm, isWasmAvailable, getActiveBackend } from './eriWasm';
 import type { EriBackend } from './hf';
 
+export interface MemoryProbeRequest {
+  type: 'memory-probe';
+  /** Basis-function counts to try, ascending. */
+  nbasisLadder: number[];
+}
+
+export type ProbeVerdict = 'resident' | 'swapping' | 'failed' | 'skipped';
+
+export interface MemoryProbeResult {
+  type: 'probe-result';
+  nbasis: number;
+  bytes: number;
+  /** The allocation itself succeeded — see `verdict` for whether it was usable. */
+  ok: boolean;
+  ms: number;
+  /** Commit throughput; collapses once the allocation is served by the page file. */
+  gbPerSec: number;
+  verdict: ProbeVerdict;
+  detail?: string;
+}
+
+export interface MemoryProbeDone { type: 'probe-done'; }
+
 export interface StressRequest {
   type: 'stress-run';
   xyzText: string;
@@ -61,7 +84,8 @@ export interface StressError {
   elapsedMs: number;
 }
 
-export type StressResponse = StressProgress | StressDone | StressError;
+export type StressResponse = StressProgress | StressDone | StressError | MemoryProbeResult | MemoryProbeDone;
+export type StressWorkerRequest = StressRequest | MemoryProbeRequest;
 
 function heap(): { used: number | null; limit: number | null } {
   const p = performance as Performance & {
@@ -76,8 +100,82 @@ function eriBytesFor(n: number): number {
   return (npair * (npair + 1) / 2) * 8;
 }
 
-self.onmessage = async (e: MessageEvent<StressRequest>) => {
+/**
+ * Largest ERI array the device can hold *in real memory*.
+ *
+ * The SCF's dominant allocation is the unique-ERI array, so the memory ceiling
+ * can be found without running any chemistry — which matters because an SCF at
+ * that size would take tens of minutes.
+ *
+ * Plain allocation success is not the answer: on a desktop OS a multi-gigabyte
+ * typed array is happily backed by the page file, so `new Float64Array` keeps
+ * succeeding long past the point where the machine is thrashing (measured: a
+ * 121 GB array "allocated" on a 32 GB desktop, at 1.4 GB/s and 84 s of disk
+ * grinding). So the probe writes one value per 4 KiB page and watches the
+ * commit throughput: once it collapses relative to the small-array baseline we
+ * are paging, not computing, and the probe stops there.
+ */
+function probeMemory(req: MemoryProbeRequest): void {
+  const post = (m: StressResponse) => (self as unknown as Worker).postMessage(m);
+
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  // deviceMemory is coarse and capped at 8 by browsers; treat it as a hint only.
+  const hintGB = nav.deviceMemory ?? 8;
+  const hardCapBytes = Math.max(4, hintGB * 2) * 1024 ** 3;
+
+  let baselineGBps = 0;
+
+  for (const nb of req.nbasisLadder) {
+    const bytes = eriBytesFor(nb);
+    const len = bytes / 8;
+
+    if (bytes > hardCapBytes) {
+      post({
+        type: 'probe-result', nbasis: nb, bytes, ok: false, ms: 0, gbPerSec: 0,
+        verdict: 'skipped',
+        detail: `beyond the ${(hardCapBytes / 1024 ** 3).toFixed(0)} GB probe cap — far past any usable working set`,
+      });
+      break;
+    }
+
+    const t0 = performance.now();
+    try {
+      if (len > Number.MAX_SAFE_INTEGER) throw new RangeError('array length exceeds addressable range');
+      let buf: Float64Array | null = new Float64Array(len);
+      // One write per 4 KiB page (512 doubles) forces the pages to be committed.
+      for (let i = 0; i < len; i += 512) buf[i] = 1;
+      if (!Number.isFinite(buf[0])) throw new Error('unexpected buffer contents');
+      buf = null;
+
+      const ms = performance.now() - t0;
+      const gbPerSec = (bytes / 1024 ** 3) / (ms / 1000);
+      // Calibrate on the first array big enough to be measured reliably.
+      if (baselineGBps === 0 && bytes >= 64 * 1024 ** 2 && ms > 5) baselineGBps = gbPerSec;
+
+      const swapping = baselineGBps > 0 && gbPerSec < 0.4 * baselineGBps;
+      post({
+        type: 'probe-result', nbasis: nb, bytes, ok: true, ms, gbPerSec,
+        verdict: swapping ? 'swapping' : 'resident',
+        ...(swapping
+          ? { detail: `commit throughput fell to ${gbPerSec.toFixed(2)} GB/s from a ${baselineGBps.toFixed(2)} GB/s baseline — this array no longer fits in real memory` }
+          : {}),
+      });
+      if (swapping) break;
+    } catch (err) {
+      post({
+        type: 'probe-result', nbasis: nb, bytes, ok: false,
+        ms: performance.now() - t0, gbPerSec: 0, verdict: 'failed',
+        detail: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      });
+      break;
+    }
+  }
+  post({ type: 'probe-done' });
+}
+
+self.onmessage = async (e: MessageEvent<StressWorkerRequest>) => {
   const req = e.data;
+  if (req.type === 'memory-probe') { probeMemory(req); return; }
   if (req.type !== 'stress-run') return;
 
   const t0 = performance.now();
