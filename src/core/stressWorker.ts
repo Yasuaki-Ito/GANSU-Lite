@@ -21,19 +21,17 @@ export interface MemoryProbeRequest {
   type: 'memory-probe';
   /** Basis-function counts to try, ascending. */
   nbasisLadder: number[];
+  baseUrl: string;
 }
 
-export type ProbeVerdict = 'resident' | 'swapping' | 'failed' | 'skipped';
+export type ProbeVerdict = 'ok' | 'failed' | 'unavailable';
 
 export interface MemoryProbeResult {
   type: 'probe-result';
   nbasis: number;
   bytes: number;
-  /** The allocation itself succeeded — see `verdict` for whether it was usable. */
   ok: boolean;
   ms: number;
-  /** Commit throughput; collapses once the allocation is served by the page file. */
-  gbPerSec: number;
   verdict: ProbeVerdict;
   detail?: string;
 }
@@ -101,74 +99,88 @@ function eriBytesFor(n: number): number {
 }
 
 /**
- * Largest ERI array the device can hold *in real memory*.
- *
- * The SCF's dominant allocation is the unique-ERI array, so the memory ceiling
- * can be found without running any chemistry — which matters because an SCF at
- * that size would take tens of minutes.
- *
- * Plain allocation success is not the answer: on a desktop OS a multi-gigabyte
- * typed array is happily backed by the page file, so `new Float64Array` keeps
- * succeeding long past the point where the machine is thrashing (measured: a
- * 121 GB array "allocated" on a 32 GB desktop, at 1.4 GB/s and 84 s of disk
- * grinding). So the probe writes one value per 4 KiB page and watches the
- * commit throughput: once it collapses relative to the small-array baseline we
- * are paging, not computing, and the probe stops there.
+ * Minimal direct instantiation of the ERI module, exposing just the allocator.
+ * `initWasm` wraps the exports and never hands out raw malloc, but the probe
+ * needs to allocate inside the module's own linear memory to be meaningful.
  */
-function probeMemory(req: MemoryProbeRequest): void {
+async function loadWasmAllocator(baseUrl: string): Promise<{
+  malloc: (n: number, align: number) => number;
+  free: (ptr: number, n: number, align: number) => void;
+  memory: WebAssembly.Memory;
+} | null> {
+  for (const name of ['wasm_eri_simd_bg.wasm', 'wasm_eri_bg.wasm']) {
+    try {
+      const r = await fetch(new URL(`${baseUrl}wasm/${name}`, self.location.origin));
+      if (!r.ok) continue;
+      const mod = await WebAssembly.compile(await r.arrayBuffer());
+      let instance: WebAssembly.Instance;
+      instance = await WebAssembly.instantiate(mod, {
+        './wasm_eri_bg.js': {
+          __wbindgen_init_externref_table: () => {
+            const t = (instance.exports as unknown as { __wbindgen_externrefs: WebAssembly.Table }).__wbindgen_externrefs;
+            const o = t.grow(4);
+            t.set(0, undefined); t.set(o + 0, undefined); t.set(o + 1, null); t.set(o + 2, true); t.set(o + 3, false);
+          },
+        },
+      });
+      const ex = instance.exports as unknown as Record<string, Function> & { memory: WebAssembly.Memory };
+      if (ex.__wbindgen_start) ex.__wbindgen_start();
+      return {
+        malloc: ex.__wbindgen_malloc as (n: number, a: number) => number,
+        free: ex.__wbindgen_free as (p: number, n: number, a: number) => void,
+        memory: ex.memory,
+      };
+    } catch { /* try the next binary */ }
+  }
+  return null;
+}
+
+/**
+ * Largest ERI array the WASM backend can actually allocate.
+ *
+ * This asks the real module's allocator for the real array, inside the real
+ * linear memory — which is the only test that matches what the SCF does. Two
+ * cheaper-looking probes were tried first and both lie: a JS `Float64Array` and
+ * a bare `WebAssembly.Memory` each report success at 225 basis functions, where
+ * the actual SCF traps with `RuntimeError: unreachable` (the Rust allocator
+ * aborting). The ceiling is wasm32's 4 GiB linear memory minus everything else
+ * the module is holding, not the machine's RAM — a 32 GB desktop and a phone hit
+ * the same architectural wall.
+ *
+ * It is also fast — tens of milliseconds per size — so the hard limit can be
+ * measured even on devices where the time budget stops the ladder long before.
+ */
+async function probeMemory(req: MemoryProbeRequest): Promise<void> {
   const post = (m: StressResponse) => (self as unknown as Worker).postMessage(m);
 
-  const nav = navigator as Navigator & { deviceMemory?: number };
-  // Stay well inside physical RAM: anything above it is swap by definition, and a
-  // browser reporting 32 GB would otherwise let the probe commit tens of GB and
-  // drag the whole machine into a paging storm.
-  const hintGB = nav.deviceMemory ?? 4;
-  const hardCapBytes = Math.min(Math.max(1, hintGB * 0.5), 8) * 1024 ** 3;
-
-  let baselineGBps = 0;
+  const w = await loadWasmAllocator(req.baseUrl);
+  if (!w) {
+    post({
+      type: 'probe-result', nbasis: 0, bytes: 0, ok: false, ms: 0, verdict: 'unavailable',
+      detail: 'could not instantiate the WASM module — this device runs the JS backend, whose ceiling is device RAM rather than the wasm32 address space',
+    });
+    post({ type: 'probe-done' });
+    return;
+  }
 
   for (const nb of req.nbasisLadder) {
     const bytes = eriBytesFor(nb);
-    const len = bytes / 8;
-
-    if (bytes > hardCapBytes) {
-      post({
-        type: 'probe-result', nbasis: nb, bytes, ok: false, ms: 0, gbPerSec: 0,
-        verdict: 'skipped',
-        detail: `beyond the ${(hardCapBytes / 1024 ** 3).toFixed(0)} GB probe cap — far past any usable working set`,
-      });
-      break;
-    }
-
     const t0 = performance.now();
     try {
-      if (len > Number.MAX_SAFE_INTEGER) throw new RangeError('array length exceeds addressable range');
-      let buf: Float64Array | null = new Float64Array(len);
-      // One write per 4 KiB page (512 doubles) forces the pages to be committed.
-      for (let i = 0; i < len; i += 512) buf[i] = 1;
-      if (!Number.isFinite(buf[0])) throw new Error('unexpected buffer contents');
-      buf = null;
-
-      const ms = performance.now() - t0;
-      const gbPerSec = (bytes / 1024 ** 3) / (ms / 1000);
-      // Calibrate on the first array big enough to be measured reliably.
-      if (baselineGBps === 0 && bytes >= 64 * 1024 ** 2 && ms > 5) baselineGBps = gbPerSec;
-
-      const swapping = baselineGBps > 0 && gbPerSec < 0.4 * baselineGBps;
-      post({
-        type: 'probe-result', nbasis: nb, bytes, ok: true, ms, gbPerSec,
-        verdict: swapping ? 'swapping' : 'resident',
-        ...(swapping
-          ? { detail: `commit throughput fell to ${gbPerSec.toFixed(2)} GB/s from a ${baselineGBps.toFixed(2)} GB/s baseline — this array no longer fits in real memory` }
-          : {}),
-      });
-      if (swapping) break;
+      const ptr = w.malloc(bytes, 8) >>> 0;
+      if (!ptr) throw new Error('allocator returned null');
+      // memory.buffer is detached by any growth, so take the view after malloc.
+      const view = new Float64Array(w.memory.buffer, ptr, bytes / 8);
+      for (let i = 0; i < view.length; i += 512) view[i] = 1;
+      if (!Number.isFinite(view[0])) throw new Error('unexpected buffer contents');
+      w.free(ptr, bytes, 8);
+      post({ type: 'probe-result', nbasis: nb, bytes, ok: true, ms: performance.now() - t0, verdict: 'ok' });
     } catch (err) {
       post({
-        type: 'probe-result', nbasis: nb, bytes, ok: false,
-        ms: performance.now() - t0, gbPerSec: 0, verdict: 'failed',
+        type: 'probe-result', nbasis: nb, bytes, ok: false, ms: performance.now() - t0, verdict: 'failed',
         detail: err instanceof Error ? `${err.name}: ${err.message}` : String(err),
       });
+      // A Rust abort leaves the module poisoned; nothing past this point is meaningful.
       break;
     }
   }
@@ -177,7 +189,7 @@ function probeMemory(req: MemoryProbeRequest): void {
 
 self.onmessage = async (e: MessageEvent<StressWorkerRequest>) => {
   const req = e.data;
-  if (req.type === 'memory-probe') { probeMemory(req); return; }
+  if (req.type === 'memory-probe') { await probeMemory(req); return; }
   if (req.type !== 'stress-run') return;
 
   const t0 = performance.now();

@@ -41,10 +41,12 @@ export interface StressSummary {
   largestCompleted: { name: string; natoms: number; nbasis: number; seconds: number } | null;
   firstFailure: { name: string; natoms: number; nbasis: number | null; mode: string } | null;
   /**
-   * Set when a timeout failure sits close enough to the budget that the reported
-   * limit is an artefact of the budget rather than a property of the device.
+   * Extrapolated cost of the first timed-out point. `fragile` marks the case
+   * where it sits close enough to the budget that run-to-run noise alone could
+   * flip the verdict — the rungs are ≈2.1x apart, so a wider window would fire
+   * on essentially every run and mean nothing.
    */
-  borderline: { estimatedSeconds: number; budgetSeconds: number; exponent: number } | null;
+  borderline: { estimatedSeconds: number; budgetSeconds: number; exponent: number; fragile: boolean } | null;
 }
 
 export interface StressOutput {
@@ -179,7 +181,9 @@ function runPoint(
         detail:
           `exceeded ${(budgetMs / 1000).toFixed(0)} s budget; ` +
           `silent for ${silentS.toFixed(0)} s after "${lastMessage}"` +
-          (silentS > 30 ? ' — a long silence usually means the worker was killed for memory' : ''),
+          (silentS > 30
+            ? ' — the worker had gone quiet, so it may have been killed rather than merely slow'
+            : ' — the worker was still reporting progress, so this is genuine slowness, not a crash'),
       });
     }, budgetMs);
 
@@ -240,12 +244,11 @@ function runPoint(
 
 // ── Memory-ceiling probe ──
 
-export interface ProbeRow { nbasis: number; bytes: number; ok: boolean; ms: number; gbPerSec: number; verdict: ProbeVerdict; detail?: string; }
+export interface ProbeRow { nbasis: number; bytes: number; ok: boolean; ms: number; verdict: ProbeVerdict; detail?: string; }
 
 /**
- * Basis-function counts to probe: the water ladder plus a short tail. The worker
- * stops on its own at the first swapping or failing size, and refuses anything
- * past its own cap, so the tail only needs to reach past a plausible ceiling.
+ * Basis-function counts to probe. The worker stops at the first size its
+ * allocator refuses, so the ladder only has to reach past a plausible ceiling.
  */
 function probeLadder(): number[] {
   const xs = new Set<number>();
@@ -265,8 +268,7 @@ function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
       const m = e.data;
       if (m.type === 'probe-result') {
         const row: ProbeRow = {
-          nbasis: m.nbasis, bytes: m.bytes, ok: m.ok, ms: m.ms,
-          gbPerSec: m.gbPerSec, verdict: m.verdict,
+          nbasis: m.nbasis, bytes: m.bytes, ok: m.ok, ms: m.ms, verdict: m.verdict,
           ...(m.detail ? { detail: m.detail } : {}),
         };
         rows.push(row);
@@ -277,24 +279,26 @@ function runMemoryProbe(onRow: (r: ProbeRow) => void): Promise<ProbeRow[]> {
     };
     // If the engine kills the worker mid-probe, the rows gathered so far still stand.
     worker.onerror = () => done();
-    const req: MemoryProbeRequest = { type: 'memory-probe', nbasisLadder: probeLadder() };
+    const req: MemoryProbeRequest = {
+      type: 'memory-probe',
+      nbasisLadder: probeLadder(),
+      baseUrl: import.meta.env.BASE_URL,
+    };
     worker.postMessage(req);
   });
 }
 
 function appendProbeRow(body: HTMLTableSectionElement, r: ProbeRow): void {
-  const good = r.verdict === 'resident';
+  const good = r.verdict === 'ok';
   const label = {
-    resident: 'resident in RAM',
-    swapping: 'SWAPPING — past usable memory',
+    ok: 'allocated in WASM memory',
     failed: 'ALLOCATION FAILED',
-    skipped: 'skipped (past cap)',
+    unavailable: 'WASM unavailable',
   }[r.verdict];
   const tr = document.createElement('tr');
   tr.innerHTML =
-    `<td class="num">${r.nbasis}</td><td class="num">${humanBytes(r.bytes)}</td>` +
+    `<td class="num">${r.nbasis || '—'}</td><td class="num">${r.bytes ? humanBytes(r.bytes) : '—'}</td>` +
     `<td class="num">${r.ms.toFixed(0)}</td>` +
-    `<td class="num">${r.gbPerSec > 0 ? r.gbPerSec.toFixed(2) : '—'}</td>` +
     `<td${good ? '' : ' class="cb-err"'}>${label}` +
     `${r.detail ? `<br><span class="cb-err">${escapeHtml(r.detail)}</span>` : ''}</td>`;
   body.appendChild(tr);
@@ -329,24 +333,27 @@ async function doProbe(): Promise<void> {
     if (body) appendProbeRow(body, r);
   });
 
-  const resident = probeRows.filter(r => r.verdict === 'resident');
-  const stopper = probeRows.find(r => r.verdict !== 'resident');
+  const allocated = probeRows.filter(r => r.verdict === 'ok');
+  const stopper = probeRows.find(r => r.verdict !== 'ok');
   const summary = document.getElementById('cb-probe-summary');
   if (summary) {
-    const last = resident.length ? resident[resident.length - 1] : null;
-    if (!last) {
-      summary.textContent = 'Could not hold even the smallest probe array — something is wrong.';
+    const last = allocated.length ? allocated[allocated.length - 1] : null;
+    const unavailable = probeRows.find(r => r.verdict === 'unavailable');
+    if (unavailable) {
+      summary.textContent =
+        `No WASM on this device, so there is no wasm32 ceiling to measure — it runs the JS ` +
+        `backend, whose limit is device RAM and shows up in the ladder above. ${unavailable.detail ?? ''}`;
+    } else if (!last) {
+      summary.textContent = 'Could not allocate even the smallest probe array — something is wrong.';
     } else {
       const why = stopper
-        ? { swapping: `at ${stopper.nbasis} the array no longer fits in real memory`,
-            failed: `allocation failed outright at ${stopper.nbasis}`,
-            skipped: `the ladder ran past the probe cap at ${stopper.nbasis}`,
-            resident: '' }[stopper.verdict]
-        : 'the probe ladder topped out at 300 basis functions without hitting a ceiling — ' +
-          'past that the N⁴ SCF cost, not memory, is what stops you';
+        ? { failed: `the allocator refused ${stopper.nbasis} (${humanBytes(stopper.bytes)})`,
+            unavailable: '',
+            ok: '' }[stopper.verdict]
+        : 'the probe ladder topped out at 300 basis functions without hitting a ceiling';
       summary.textContent =
-        `Memory ceiling: ${stopper ? '' : '≥ '}${last.nbasis} basis functions — a ${humanBytes(last.bytes)} ERI array ` +
-        `still resident in RAM (${last.gbPerSec.toFixed(1)} GB/s); ${why}.`;
+        `WASM memory ceiling: ${stopper ? '' : '≥ '}${last.nbasis} basis functions — ` +
+        `a ${humanBytes(last.bytes)} ERI array allocates inside the module's linear memory; ${why}.`;
     }
   }
   setStatus('memory probe done');
@@ -379,10 +386,15 @@ function summarize(points: StressPoint[], budgetSeconds: number): StressSummary 
   let borderline: StressSummary['borderline'] = null;
   if (bad && bad.status === 'timeout') {
     const est = estimateFailingTime(ok, bad);
-    // Within 2x of the budget means a modestly larger budget would very likely
-    // have let this point through — the rung is not really beyond the device.
-    if (est && est.seconds < 2 * budgetSeconds) {
-      borderline = { estimatedSeconds: est.seconds, budgetSeconds, exponent: est.exponent };
+    if (est) {
+      // Observed run-to-run spread on this workload is 5-15 %, and a contended
+      // machine drifts further still, so call it fragile inside 25 % of budget.
+      borderline = {
+        estimatedSeconds: est.seconds,
+        budgetSeconds,
+        exponent: est.exponent,
+        fragile: est.seconds < 1.25 * budgetSeconds,
+      };
     }
   }
 
@@ -464,19 +476,19 @@ export function stressPanelHTML(): string {
       </div>
       <h3 style="font-size:0.95rem;margin:16px 0 4px">Hard memory ceiling</h3>
       <p class="cb-note">
-        The SCF's dominant allocation is the unique-ERI array (N⁴/8 doubles). Probing that
-        allocation directly finds the memory ceiling in seconds, instead of waiting out an SCF that
-        would take tens of minutes at the same size. Allocation success alone is not the test — a
-        desktop OS will back a multi-gigabyte array with the page file and report success while
-        thrashing — so the probe writes one value per page and stops when commit throughput
-        collapses against the small-array baseline. Only sizes marked <em>resident in RAM</em> count.
-        The probe stops at 300 basis functions and stays inside half of the reported device memory,
-        so it can never push the machine into a paging storm.
+        The SCF's dominant allocation is the unique-ERI array (N⁴/8 doubles), and it lives inside
+        the WASM module's linear memory. The probe asks the module's own allocator for exactly that
+        array, at each size, and writes across it — tens of milliseconds per size instead of the
+        tens of minutes an SCF at that size would take. Synthetic substitutes do not work: a JS
+        <code>Float64Array</code> and a bare <code>WebAssembly.Memory</code> both report success at
+        225 basis functions, where the real calculation traps. The ceiling is wasm32's 4 GiB address
+        space minus what the module already holds, so it is a property of the engine rather than of
+        the machine's RAM.
       </p>
       <button id="cb-stress-probe">Probe memory ceiling</button>
       <div id="cb-probe-section" style="display:none;margin-top:10px">
         <table class="cb-results-table" style="font-size:0.8rem;max-width:520px">
-          <thead><tr><th class="num">Basis fns</th><th class="num">ERI array</th><th class="num">ms</th><th class="num">GB/s</th><th>Result</th></tr></thead>
+          <thead><tr><th class="num">Basis fns</th><th class="num">ERI array</th><th class="num">ms</th><th>Result</th></tr></thead>
           <tbody id="cb-probe-body"></tbody>
         </table>
         <p id="cb-probe-summary" class="cb-note"></p>
@@ -750,11 +762,16 @@ function renderSummary(): void {
   if (s.borderline) {
     const b = s.borderline;
     notes.push(
-      `# BORDERLINE: ${s.firstFailure?.name} is extrapolated to need ~${b.estimatedSeconds.toFixed(0)} s ` +
+      `# ${s.firstFailure?.name} is extrapolated to need ~${b.estimatedSeconds.toFixed(0)} s ` +
       `(fitted N^${b.exponent.toFixed(1)}) against a ${b.budgetSeconds} s budget.`,
-      `# The reported limit reflects the budget, not the device. Re-run with the budget ` +
-      `raised to at least ${Math.ceil(b.estimatedSeconds * 1.5 / 60) * 60} s before using this row.`,
     );
+    if (b.fragile) {
+      notes.push(
+        `# FRAGILE: that is within 25% of the budget, so run-to-run noise alone could flip it.`,
+        `# Treat this row as "limit at a ${b.budgetSeconds} s budget", not as the device's ceiling.`,
+        `# For the device's own ceiling, re-run with the budget at ${Math.ceil(b.estimatedSeconds * 1.5 / 60) * 60} s or more.`,
+      );
+    }
   }
   const nonConverged = state.points.filter(p => p.status === 'ok' && p.converged === false);
   if (nonConverged.length) notes.push(`# SCF did not converge for: ${nonConverged.map(p => p.name).join(', ')}`);
