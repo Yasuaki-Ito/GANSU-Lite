@@ -11,6 +11,7 @@ import { theorySelectHTML, buildHFOrDFT, HEAVY_ITERATIVE_EXCLUDE, type TheoryCho
 import { RHF } from './core/rhf';
 import { initTheme, toggleTheme, isDark, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 
 // ── Scenario definitions ─────────────────────────────────────────────
@@ -159,6 +160,7 @@ function render(): void {
     row.appendChild(card);
   }
   grid.appendChild(row);
+  enhanceRadioGroup(grid as HTMLElement, { label: t('walsh.molecule') });
 
   // Event listeners
   root.querySelector('#nav-theme')!.addEventListener('click', () => { toggleTheme(); render(); });

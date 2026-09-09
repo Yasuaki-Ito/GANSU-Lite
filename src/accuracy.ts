@@ -8,6 +8,7 @@ import type { FunctionalName } from './core/xcFunctional';
 import type { AccWorkerRequest, AccWorkerResponse } from './core/accuracyWorker';
 import { initTheme, toggleTheme, isDark, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 
 // ── Molecule definitions ─────────────────────────────────────────────
@@ -431,6 +432,7 @@ function render(): void {
     row.appendChild(card);
   }
   grid.appendChild(row);
+  enhanceRadioGroup(grid as HTMLElement, { label: t('acc.molecule') });
 
   // Basis select
   root.querySelector('#basis-select')!.addEventListener('change', (e) => {

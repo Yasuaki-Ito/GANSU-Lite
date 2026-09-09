@@ -15,6 +15,7 @@ import { computeRHFGradient } from './core/gradient';
 // import { computeNumericalHessian, jacobiEigen as jacobiEigenLocal } from './core/hessian';
 import { initTheme, toggleTheme, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { initWasm, getActiveBackend } from './core/eriWasm';
 import { renderHeader } from './ui/nav';
 import { createGeomOptViewer, type GeomOptViewer } from './ui/moleculeViewer3D';
@@ -662,6 +663,7 @@ function render(): void {
     });
     grid.appendChild(card);
   }
+  enhanceRadioGroup(grid as HTMLElement, { label: t('gopt.molecule') });
 
   // Algorithm grouped buttons
   const algoArea = root.querySelector('#algo-area')!;

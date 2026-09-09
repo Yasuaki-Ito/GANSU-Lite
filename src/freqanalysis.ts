@@ -14,6 +14,7 @@ import { computeHessianAuto, computeThermodynamics, getAtomicMass, type HessianR
 import { computeRHFGradient } from './core/gradient';
 import { initTheme, toggleTheme, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 import { atomicNumberToElementName } from './core/constants';
 import { ProgressTracker, type StepDef } from './ui/progressTracker';
@@ -208,6 +209,7 @@ function render(): void {
     });
     grid.appendChild(card);
   }
+  enhanceRadioGroup(grid as HTMLElement, { label: t('gopt.molecule') });
 
   root.querySelector('#nav-theme')!.addEventListener('click', () => { toggleTheme(); render(); });
   root.querySelector('#nav-lang')!.addEventListener('click', () => { toggleLang(); render(); });

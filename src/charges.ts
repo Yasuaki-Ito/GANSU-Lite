@@ -14,6 +14,7 @@ import type { DipoleMoment } from './core/properties';
 import { atomicNumberToElementName, BOHR_TO_ANGSTROM } from './core/constants';
 import { initTheme, toggleTheme, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 import { renderChargeViewer } from './ui/moleculeViewer3D';
 
@@ -270,6 +271,7 @@ function render(): void {
     }
     grid.appendChild(row);
   }
+  enhanceRadioGroup(grid as HTMLElement, { label: t('chg.molecule') });
 
   // Event listeners
   root.querySelector('#nav-theme')!.addEventListener('click', () => { toggleTheme(); render(); });

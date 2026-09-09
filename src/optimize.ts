@@ -13,6 +13,7 @@ import { UHF } from './core/uhf';
 import { Matrix } from './linalg/matrix';
 import { initTheme, toggleTheme, isDark, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 import { showDualPeriodicTable, COVALENT_RADII } from './ui/periodicTable';
 
@@ -515,6 +516,7 @@ function render(): void {
     row.appendChild(card);
     grid.appendChild(row);
   }
+  enhanceRadioGroup(grid as HTMLElement, { label: t('opt.scenario') });
 
   function applyCustomScenario() {
     if (!customAtomA || !customAtomB) return;

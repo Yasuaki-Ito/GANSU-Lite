@@ -134,6 +134,9 @@ h1 {
   border-radius: 8px;
   padding: 16px;
   border: 1px solid var(--color-border);
+  /* Grid items default to min-width:auto, which lets wide monospace content
+     push the column past its track and force the page to scroll sideways. */
+  min-width: 0;
 }
 
 .panel h2 {
@@ -1134,4 +1137,34 @@ textarea.dragover {
   margin: 0 4px 0 6px;
   align-self: center;
   font-weight: 500;
+}
+
+/* ── Narrow viewports ──
+   The Calculator is the only page whose layout lives in this stylesheet; the
+   others inject their own and already collapse at 700px. Same breakpoint here so
+   the whole app behaves consistently: the two control panels and the results
+   grid stack instead of staying side by side. */
+@media (max-width: 700px) {
+  #app {
+    padding: 12px;
+  }
+
+  .controls,
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Result tables are only 3-4 columns, so tightening the type is enough to fit
+     a 390px viewport without a scroll container. */
+  .result-table {
+    font-size: 0.74rem;
+  }
+  .result-table th,
+  .result-table td {
+    padding: 3px 5px;
+  }
+
+  textarea {
+    height: 140px;
+  }
 }

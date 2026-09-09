@@ -1,6 +1,7 @@
 /** Periodic table modal — pick an element from a visual grid. */
 
 import { t } from './i18n';
+import { enhanceRadioGroup } from './radioGroup';
 
 /* ── Covalent radii (Å) for scan-range estimation ── */
 
@@ -35,6 +36,8 @@ const LAYOUT: [number, number, number, string][] = [
  *  When a cell is clicked, `onPick(sym, z)` is called. */
 function buildGrid(
   onPick: (sym: string, z: number) => void,
+  label: string,
+  key: string,
   selectedZ?: number,
   maxZ = 18,
 ): HTMLDivElement {
@@ -64,6 +67,20 @@ function buildGrid(
 
     grid.appendChild(cell);
   }
+
+  enhanceRadioGroup(grid, {
+    label,
+    key,
+    itemSelector: '.pte-cell',
+    selectedClass: 'pte-selected',
+    disabledClass: 'pte-disabled',
+    // The layout is a real periodic table, so up/down should change period.
+    coords: (el) => ({
+      row: Number(el.style.gridRow) || 0,
+      col: Number(el.style.gridColumn) || 0,
+    }),
+  });
+
   return grid;
 }
 
@@ -84,6 +101,9 @@ export function showDualPeriodicTable(
 
   const modal = document.createElement('div');
   modal.className = 'pte-modal pte-dual';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', t('opt.customSelect'));
 
   function rebuild() {
     modal.innerHTML = '';
@@ -102,7 +122,7 @@ export function showDualPeriodicTable(
     colA.appendChild(buildGrid((sym, z) => {
       pickA = { symbol: sym, z };
       rebuild();
-    }, pickA?.z, 20));  // Period 1-3 + K,Ca
+    }, t('opt.customAtomA'), 'pte-atom-a', pickA?.z, 20));  // Period 1-3 + K,Ca
     tablesRow.appendChild(colA);
 
     // Right: Atom B
@@ -115,7 +135,7 @@ export function showDualPeriodicTable(
     colB.appendChild(buildGrid((sym, z) => {
       pickB = { symbol: sym, z };
       rebuild();
-    }, pickB?.z, 12));  // Period 1-2 + Na,Mg
+    }, t('opt.customAtomB'), 'pte-atom-b', pickB?.z, 12));  // Period 1-2 + Na,Mg
     tablesRow.appendChild(colB);
 
     modal.appendChild(tablesRow);
@@ -127,7 +147,7 @@ export function showDualPeriodicTable(
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'pte-btn pte-btn-cancel';
     cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => overlay.remove());
+    cancelBtn.addEventListener('click', () => close());
     btnRow.appendChild(cancelBtn);
 
     const okBtn = document.createElement('button');
@@ -136,7 +156,7 @@ export function showDualPeriodicTable(
     okBtn.disabled = !pickA || !pickB;
     okBtn.addEventListener('click', () => {
       if (pickA && pickB) {
-        overlay.remove();
+        close();
         onSelect(pickA.symbol, pickA.z, pickB.symbol, pickB.z);
       }
     });
@@ -145,12 +165,56 @@ export function showDualPeriodicTable(
     modal.appendChild(btnRow);
   }
 
+  // Without this the dialog is a dead end for anyone not using a mouse: there is
+  // nothing focusable to reach, no way to pick an element and no way back out.
+  const previouslyFocused = document.activeElement as HTMLElement | null;
+
+  function close(): void {
+    overlay.remove();
+    document.removeEventListener('keydown', onKeydown, true);
+    previouslyFocused?.focus?.();
+  }
+
+  /** Everything the dialog offers the keyboard: the two grids' tab stops and the buttons. */
+  function focusables(): HTMLElement[] {
+    return Array.from(
+      modal.querySelectorAll<HTMLElement>('[tabindex="0"], button:not([disabled])'),
+    );
+  }
+
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    // Keep Tab inside the dialog; otherwise focus wanders into the page behind
+    // it, which is still there and still clickable.
+    const stops = focusables();
+    if (stops.length === 0) return;
+    const first = stops[0], last = stops[stops.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (!modal.contains(active)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+    } else if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   rebuild();
   overlay.appendChild(modal);
 
   overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) close();
   });
 
+  document.addEventListener('keydown', onKeydown, true);
   document.body.appendChild(overlay);
+  focusables()[0]?.focus();
 }

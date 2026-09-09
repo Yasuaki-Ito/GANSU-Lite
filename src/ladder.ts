@@ -14,6 +14,7 @@ import { computeMP3Energy } from './core/mp3';
 import { computeCCSDEnergy } from './core/ccsd';
 import { initTheme, toggleTheme, isDark, getThemeColors } from './ui/theme';
 import { t, initLang, toggleLang } from './ui/i18n';
+import { enhanceRadioGroup } from './ui/radioGroup';
 import { renderHeader } from './ui/nav';
 
 // ── Molecule definitions ─────────────────────────────────────────────
@@ -231,6 +232,7 @@ function render(): void {
     row.appendChild(card);
   }
   grid.appendChild(row);
+  enhanceRadioGroup(grid as HTMLElement, { label: t('ladder.molecule') });
 
   // Event listeners
   root.querySelector('#nav-theme')!.addEventListener('click', () => { toggleTheme(); render(); });
