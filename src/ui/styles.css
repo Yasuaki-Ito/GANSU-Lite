@@ -369,6 +369,10 @@ textarea.dragover {
 /* ── Backend toggle buttons ── */
 .backend-toggles {
   display: flex;
+  /* Rows like the basis-set list hold seven monospace buttons. Flex items will
+     not shrink below their min-content width, so without wrapping the row
+     overflows any column narrower than about 360px and takes the page with it. */
+  flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 12px;
 }
@@ -1185,5 +1189,28 @@ textarea.dragover {
   .gansu-nav a {
     padding: 7px 10px;
     font-size: 0.75rem;
+  }
+
+  /* The element picker is 18 fixed-width columns per table, side by side —
+     ~1460px before it can shrink at all. Stack the two tables, cap the dialog
+     to the viewport, and let each table scroll inside its own box. A periodic
+     table genuinely needs two dimensions, which is the case SC 1.4.10 exempts;
+     what matters is that the page itself no longer scrolls. */
+  .pte-modal {
+    padding: 14px 16px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .pte-tables {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .pte-col {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .pte-cell {
+    width: 32px;
+    height: 36px;
   }
 }

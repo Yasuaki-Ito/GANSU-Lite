@@ -1,4 +1,4 @@
-import"./styles-qvpQWta1.js";import{i as le,c as pe,r as ge,t as h,a as he,b as xe,d as me,g as ee}from"./nav-CmRn2n6S.js";import{e as fe}from"./radioGroup-C7LT8iiA.js";const te=[{id:"h2",labelKey:"ladder.scenH2",descKey:"ladder.descH2",charge:0,mult:1,xyz:`2
+import"./styles-T9xqG_Ue.js";import{i as le,c as pe,r as ge,t as h,a as he,b as xe,d as me,g as ee}from"./nav-CmRn2n6S.js";import{e as fe}from"./radioGroup-C7LT8iiA.js";const te=[{id:"h2",labelKey:"ladder.scenH2",descKey:"ladder.descH2",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"beh2",labelKey:"ladder.scenBeH2",descKey:"ladder.descBeH2",charge:0,mult:1,xyz:`3
