@@ -1167,4 +1167,23 @@ textarea.dragover {
   textarea {
     height: 140px;
   }
+
+  /* The tab strip is a scroll container by default, which on a phone means the
+     row scrolls sideways inside itself. Wrapping instead keeps every tab
+     reachable without any horizontal scrolling — the shape SC 1.4.10 (Reflow)
+     asks for at 320px. `overflow` has to go back to visible as a pair: with
+     overflow-y hidden, an overflow-x of visible would compute to auto and the
+     scrollbar would survive. */
+  .gansu-header {
+    padding: 0 12px;
+  }
+  .gansu-nav {
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 4px 2px;
+  }
+  .gansu-nav a {
+    padding: 7px 10px;
+    font-size: 0.75rem;
+  }
 }

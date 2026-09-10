@@ -1,4 +1,4 @@
-import"./styles-Cy6Xmkt2.js";import{p as V}from"./parseXYZ-ByfvMHmk.js";import{g as D,f as A}from"./ri-DT3jfd0v.js";import{a as Z,H as j,b as _}from"./theoryControls-CuXHSm5X.js";import{i as U,c as X,r as Y,t as d,a as J,b as Q,g as W,d as ee}from"./nav-CmRn2n6S.js";import{e as te}from"./radioGroup-C7LT8iiA.js";const O=[{id:"h2",labelKey:"conv.scenH2",descKey:"conv.descH2",charge:0,mult:1,xyz:`2
+import"./styles-qvpQWta1.js";import{p as V}from"./parseXYZ-ByfvMHmk.js";import{g as D,f as A}from"./ri-DT3jfd0v.js";import{a as Z,H as j,b as _}from"./theoryControls-CuXHSm5X.js";import{i as U,c as X,r as Y,t as d,a as J,b as Q,g as W,d as ee}from"./nav-CmRn2n6S.js";import{e as te}from"./radioGroup-C7LT8iiA.js";const O=[{id:"h2",labelKey:"conv.scenH2",descKey:"conv.descH2",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"hf",labelKey:"conv.scenHF",descKey:"conv.descHF",charge:0,mult:1,xyz:`2
