@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use GANSU Lite, please cite the paper below."
+title: "GANSU Lite"
+type: software
+license: BSD-3-Clause
+repository-code: "https://github.com/Yasuaki-Ito/GANSU-Lite"
+url: "https://yasuaki-ito.github.io/GANSU-Lite/"
+authors:
+  - family-names: Ito
+    given-names: Yasuaki
+  - family-names: Fujii
+    given-names: Haruto
+  - family-names: Tsuji
+    given-names: Satoki
+  - family-names: Nakano
+    given-names: Koji
+  - family-names: Kasagi
+    given-names: Akihiko
+preferred-citation:
+  type: article
+  title: "GANSU lite: A zero-install, browser-based quantum chemistry platform"
+  authors:
+    - family-names: Ito
+      given-names: Yasuaki
+    - family-names: Fujii
+      given-names: Haruto
+    - family-names: Tsuji
+      given-names: Satoki
+    - family-names: Nakano
+      given-names: Koji
+    - family-names: Kasagi
+      given-names: Akihiko
+  journal: "SoftwareX"
+  volume: 36
+  start: 103046
+  year: 2026
+  issn: "2352-7110"
+  doi: "10.1016/j.softx.2026.103046"
+  url: "https://www.sciencedirect.com/science/article/pii/S2352711026005376"

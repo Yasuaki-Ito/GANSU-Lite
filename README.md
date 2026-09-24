@@ -4,6 +4,8 @@ A client-side, zero-install quantum-chemistry playground that runs Hartree–Foc
 
 **Live demo:** https://yasuaki-ito.github.io/GANSU-Lite/
 
+**Paper:** Y. Ito, H. Fujii, S. Tsuji, K. Nakano, A. Kasagi, "GANSU lite: A zero-install, browser-based quantum chemistry platform," *SoftwareX* **36**, 103046 (2026). [doi:10.1016/j.softx.2026.103046](https://doi.org/10.1016/j.softx.2026.103046)
+
 No server, no upload, no install — all computations run locally in JavaScript / WebAssembly.
 
 ## Features
@@ -157,6 +159,28 @@ into `docs/`.
 `docs/` is the published site. After `npm run build`, commit the regenerated
 `docs/` together with your source changes and push to `main`; GitHub Pages picks
 it up automatically.
+
+## Citation
+
+If you use GANSU Lite in your work, please cite:
+
+> Yasuaki Ito, Haruto Fujii, Satoki Tsuji, Koji Nakano, Akihiko Kasagi.
+> GANSU lite: A zero-install, browser-based quantum chemistry platform.
+> *SoftwareX* **36**, 103046 (2026). https://doi.org/10.1016/j.softx.2026.103046
+
+```bibtex
+@article{ITO2026103046,
+  title    = {GANSU lite: A zero-install, browser-based quantum chemistry platform},
+  author   = {Yasuaki Ito and Haruto Fujii and Satoki Tsuji and Koji Nakano and Akihiko Kasagi},
+  journal  = {SoftwareX},
+  volume   = {36},
+  pages    = {103046},
+  year     = {2026},
+  issn     = {2352-7110},
+  doi      = {10.1016/j.softx.2026.103046},
+  url      = {https://www.sciencedirect.com/science/article/pii/S2352711026005376},
+}
+```
 
 ## License
 

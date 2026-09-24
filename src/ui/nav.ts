@@ -7,6 +7,7 @@ const FOOTER_ID = 'gansu-footer';
 const REPO_URL = 'https://github.com/Yasuaki-Ito/GANSU-Lite';
 const BOOK_URL_JA = 'https://yasuaki-ito.github.io/book/qcbook/';
 const BOOK_URL_EN = 'https://yasuaki-ito.github.io/book/en/qcbook/';
+const PAPER_URL = 'https://doi.org/10.1016/j.softx.2026.103046';
 
 /** GitHub Octocat mark, inline SVG (currentColor for theme support). */
 const GITHUB_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true" style="vertical-align:-2px;margin-right:3px;">
@@ -27,10 +28,13 @@ function footerHTML(): string {
   const licenseLabel = isJa ? 'BSD 3-Clause ライセンス' : 'BSD 3-Clause License';
   const bookLabel = isJa ? '解説書' : 'Companion textbook';
   const bookHref = isJa ? BOOK_URL_JA : BOOK_URL_EN;
+  const paperLabel = isJa ? '論文 (SoftwareX 2026)' : 'Paper (SoftwareX 2026)';
   return `
     <span>© 2026 Yasuaki Ito</span>
     <span class="sep">·</span>
     <a href="${bookHref}" target="_blank" rel="noopener" class="book-link">📖 ${bookLabel}</a>
+    <span class="sep">·</span>
+    <a href="${PAPER_URL}" target="_blank" rel="noopener">📄 ${paperLabel}</a>
     <span class="sep">·</span>
     <a href="${REPO_URL}/blob/main/LICENSE" target="_blank" rel="noopener">${LAW_ICON}${licenseLabel}</a>
     <span class="sep">·</span>
