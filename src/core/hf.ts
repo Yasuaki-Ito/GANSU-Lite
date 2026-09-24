@@ -57,11 +57,15 @@ export abstract class HF {
   protected _targetGrid?: GridPoint[];
   protected _gridLevel: GridLevel = 'medium';
   protected _xcEnergy = 0;
+  protected _gridElectrons?: number;
   protected _gridSwitched = false;
 
   get xcFunctional(): XCFunctional | undefined { return this._xcFunctional; }
   get grid(): GridPoint[] | undefined { return this._grid; }
   get xcEnergy(): number { return this._xcEnergy; }
+  /** ∫ρ dr evaluated on the XC grid (DFT only). Deviation from the electron
+   *  count is the standard sanity check on grid quality. */
+  get gridElectrons(): number | undefined { return this._gridElectrons; }
 
   setDFT(functional: XCFunctional, grid: GridPoint[], coarseGrid?: GridPoint[]) {
     this._xcFunctional = functional;
@@ -77,6 +81,12 @@ export abstract class HF {
     if (!this._gridSwitched && this._targetGrid) {
       this._grid = this._targetGrid;
       this._gridSwitched = true;
+      // The DIIS/ADIIS history holds Fock matrices built on the coarse grid. They are
+      // inconsistent with the new objective, and when the density can no longer change
+      // (H2/STO-3G: fixed by symmetry) the error vectors vanish and the extrapolation
+      // returns an arbitrary mixture of coarse- and target-grid Fock matrices — the
+      // energy still converges but orbital energies come out 0.5 eV off. Start afresh.
+      this.scfAccelerator?.reset();
     }
   }
 
@@ -248,12 +258,18 @@ export abstract class HF {
       callbacks?.onIteration?.(iter, totalEnergy, deltaE);
 
       // Switch to target grid when close to convergence (DFT only)
+      let switchedThisIter = false;
       if (this._xcFunctional && !this._gridSwitched && iter > 0 && Math.abs(deltaE) < 1e-4) {
         this.switchToTargetGrid();
+        switchedThisIter = true;
         callbacks?.onProgress?.(`Switching to target grid (${this._grid!.length} points)`);
       }
 
-      if (iter > 0 && Math.abs(deltaE) < this.convergenceThreshold) {
+      // The energy of the switching iteration was evaluated on the coarse grid, so it
+      // must never satisfy the convergence test: small systems (e.g. H2/STO-3G) converge
+      // on the coarse grid within the same iteration and would otherwise return without
+      // a single target-grid evaluation (1e-4 Eh error, ∫ρ off by 2e-4).
+      if (!switchedThisIter && iter > 0 && Math.abs(deltaE) < this.convergenceThreshold) {
         callbacks?.onProgress?.(`Converged after ${iter + 1} iterations`);
         callbacks?.onPhase?.('scf', 'done');
         return totalEnergy;

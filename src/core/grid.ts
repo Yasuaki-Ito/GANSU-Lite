@@ -27,14 +27,29 @@ function getBraggSlaterRadius(z: number): number {
 }
 
 /** Mura-Knowles radial scaling parameter R (Bohr).
- *  Per Mura & Knowles, Chem. Phys. Lett. 254 (1996) 268: hydrogen uses R=5.0
- *  while other atoms use the Bragg-Slater radius. With R=BS for H the outer
- *  cutoff is ~2.6 Bohr, far too tight for the diffuse STO-3G 1s primitive
- *  (exponent 0.169 ⇒ width ~2.4 Bohr; the tail extends to ~10 Bohr).
- *  This caused ~0.6 % over-integration of ρ for H atoms and ~17 mH H2 LDA error. */
+ *  Mura & Knowles (J. Chem. Phys. 104, 9848 (1996)) use a fixed R for every
+ *  element: 7.0 Bohr, lowered to 5.0 for the alkali / alkaline-earth metals
+ *  (Li, Be, Na, Mg, K, Ca) whose valence density is very diffuse. PySCF uses
+ *  the same convention.
+ *
+ *  Earlier versions used the Bragg-Slater radius as R (with a 5.0 special case
+ *  for H). That under-samples the outer region of compact atoms: Ar has
+ *  BS = 1.6 Bohr, so a 50-point grid placed only 2-3 radial shells beyond
+ *  3 Bohr. In Ar2 at 3.8 Å the Becke cell extends to 3.6 Bohr, ρ was
+ *  mis-integrated by 2.7e-2 electrons and the B3LYP curve showed a spurious
+ *  -18 kJ/mol minimum; even the 75-point "fine" grid was 7 kJ/mol off.
+ *  With R = 7.0 the same 50-point grid integrates ρ to 3e-4 and the curve is
+ *  converged (-0.5 kJ/mol vs a 75-point reference at -0.02).
+ *
+ *  Hydrogen keeps R = 5.0 (the value this code has always used for H). H2 is
+ *  already grid-converged with it, and R = 7.0 for H exposes a sensitivity of the
+ *  PBE *potential* (not the energy) to the outer radial shells: H2/STO-3G PBE
+ *  HOMO moves by +0.5 eV on the 50-point grid while E_xc is unchanged to 1e-8.
+ *  That is a PBE-potential issue to be fixed separately; until then R = 5.0
+ *  keeps the validated H behaviour. */
 function getMuraKnowlesR(z: number): number {
-  if (z === 1) return 5.0;  // H special case (Mura-Knowles 1996)
-  return getBraggSlaterRadius(z);
+  if (z === 1) return 5.0;
+  return (z === 3 || z === 4 || z === 11 || z === 12 || z === 19 || z === 20) ? 5.0 : 7.0;
 }
 
 export type GridLevel = 'coarse' | 'medium' | 'fine';
@@ -42,6 +57,10 @@ export type GridLevel = 'coarse' | 'medium' | 'fine';
 interface GridSpec {
   nrad: number;
   ntheta: number;  // Gauss-Legendre points for θ
+  /** Multiplier on the Mura-Knowles radial scale R (experiments only). */
+  rScale?: number;
+  /** Replace the per-element radial scale R(Z) entirely (experiments only). */
+  rFunc?: (z: number) => number;
 }
 
 const GRID_SPECS: Record<GridLevel, GridSpec> = {
@@ -190,8 +209,14 @@ function computeBeckeWeights(
 export function buildMolecularGrid(
   atoms: Atom[],
   level: GridLevel = 'medium',
+  overrideSpec?: Partial<GridSpec>,
 ): GridPoint[] {
-  const spec = GRID_SPECS[level];
+  const spec: GridSpec = { ...GRID_SPECS[level] };
+  if (overrideSpec) {
+    for (const [k, v] of Object.entries(overrideSpec)) {
+      if (v !== undefined) (spec as unknown as Record<string, unknown>)[k] = v;
+    }
+  }
   const angularGrid = productAngularGrid(spec.ntheta);
   const natom = atoms.length;
 
@@ -213,7 +238,7 @@ export function buildMolecularGrid(
   for (let iAtom = 0; iAtom < natom; iAtom++) {
     const atom = atoms[iAtom];
     const cx = atom.coordinate.x, cy = atom.coordinate.y, cz = atom.coordinate.z;
-    const radialR = getMuraKnowlesR(atom.atomicNumber);
+    const radialR = (spec.rFunc ?? getMuraKnowlesR)(atom.atomicNumber) * (spec.rScale ?? 1);
     const radialGrid = muraKnowlesRadial(spec.nrad, radialR);
 
     for (const rp of radialGrid) {

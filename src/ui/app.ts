@@ -1717,6 +1717,8 @@ export function initApp(root: HTMLElement) {
       method,
       totalEnergy,
       nuclearRepulsion: hf.nuclearRepulsion,
+      gridElectrons: hf.gridElectrons,
+      gridPoints: hf.grid?.length,
       orbitalEnergies,
       mullikenCharges,
       dipole,
@@ -1767,6 +1769,19 @@ export function initApp(root: HTMLElement) {
         const virial = -V / ec.kinetic;
         energyRows += `<tr title="${t('res.virialTip')}"><td>${t('res.virialRatio')}</td><td>${virial.toFixed(6)}</td></tr>`;
       }
+    }
+    // DFT grid quality: ∫ρ dr should reproduce the electron count
+    if (result.gridElectrons !== undefined) {
+      const nElec = result.numOccupiedBeta !== undefined
+        ? result.numOccupied + result.numOccupiedBeta
+        : result.numOccupied * 2;
+      const dev = Math.abs(result.gridElectrons - nElec);
+      const devClass = dev < 1e-4 ? '' : dev < 1e-2
+        ? ' style="color:var(--color-warning,#b26a00)"'
+        : ' style="color:var(--color-error)"';
+      const pts = result.gridPoints ? ` (${result.gridPoints.toLocaleString()} pts)` : '';
+      energyRows += `<tr title="${t('res.gridElectronsTip')}"><td>${t('res.gridElectrons')}${pts}</td>`
+        + `<td${devClass}>${result.gridElectrons.toFixed(6)} &nbsp;(dev ${dev.toExponential(1)})</td></tr>`;
     }
     // HOMO-LUMO gap & Koopmans IP/EA
     if (result.orbitalEnergies.length > 0) {

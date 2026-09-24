@@ -118,6 +118,7 @@ export class RHF extends HF {
         n, this.densityMatrix.data as Float64Array, null,
       );
       this._xcEnergy = xcResult.exc;
+      this._gridElectrons = xcResult.numElectrons;
       this._lastVxc = new Matrix(n, n, xcResult.vxcA);
     }
 

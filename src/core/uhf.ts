@@ -165,6 +165,7 @@ export class UHF extends HF {
         this.densityBeta.data as Float64Array,
       );
       this._xcEnergy = xcResult.exc;
+      this._gridElectrons = xcResult.numElectrons;
       this._lastVxcA = new Matrix(n, n, xcResult.vxcA);
       this._lastVxcB = xcResult.vxcB ? new Matrix(n, n, xcResult.vxcB) : this._lastVxcA;
     }

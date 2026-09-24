@@ -75,6 +75,9 @@ export interface WorkerResult {
   method?: HFMethod;
   totalEnergy: number;
   nuclearRepulsion: number;
+  /** DFT only: ∫ρ dr evaluated on the XC grid (grid-quality check). */
+  gridElectrons?: number;
+  gridPoints?: number;
   orbitalEnergies: number[];
   mullikenCharges: number[];
   dipole: { x: number; y: number; z: number; total: number; debye: number };
@@ -647,6 +650,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       method,
       totalEnergy,
       nuclearRepulsion: hf.nuclearRepulsion,
+      gridElectrons: hf.gridElectrons,
+      gridPoints: hf.grid?.length,
       orbitalEnergies,
       mullikenCharges,
       dipole,

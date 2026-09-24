@@ -248,7 +248,13 @@ export function computeXC(
     if (rhoA < 0) rhoA = 0;
     if (rhoB < 0) rhoB = 0;
     const rho = rhoA + rhoB;
-    if (rho < 1e-20) continue;
+    numElec += rho * gp.weight;
+    // Density threshold. Points with ρ below ~1e-10 contribute nothing to the energy
+    // but the GGA *potentials* are numerically unstable there (PBE correlation:
+    // A = β/γ/(exp(-ε_c/γ)-1) → ∞, t ∝ ρ^(-7/6) → ∞). With the Mura-Knowles grid
+    // reaching ~25 Bohr, a 1e-20 cutoff let such points shift the H2/STO-3G PBE
+    // HOMO by 0.5 eV. 1e-10 is the conventional libxc/PySCF-level cutoff.
+    if (rho < 1e-10) continue;
 
     const inp: XCInput = { rhoA, rhoB };
     if (needGrad) {
@@ -258,7 +264,6 @@ export function computeXC(
     }
     if (needTau) { inp.tauA = tauA; inp.tauB = tauB; }
 
-    numElec += rho * gp.weight;
     const xcOut = functional.evaluate(inp);
     exc += xcOut.exc * rho * gp.weight;
 
