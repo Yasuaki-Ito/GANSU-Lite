@@ -170,7 +170,7 @@ If you use GANSU Lite in your work, please cite:
 
 ```bibtex
 @article{ITO2026103046,
-  title    = {GANSU lite: A zero-install, browser-based quantum chemistry platform},
+  title    = {{GANSU lite: A zero-install, browser-based quantum chemistry platform}},
   author   = {Yasuaki Ito and Haruto Fujii and Satoki Tsuji and Koji Nakano and Akihiko Kasagi},
   journal  = {SoftwareX},
   volume   = {36},

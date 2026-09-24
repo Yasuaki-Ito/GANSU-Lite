@@ -2,12 +2,12 @@
 
 import { t, getLang } from './i18n';
 import { isDark } from './theme';
+import { showCiteDialog } from './citation';
 
 const FOOTER_ID = 'gansu-footer';
 const REPO_URL = 'https://github.com/Yasuaki-Ito/GANSU-Lite';
 const BOOK_URL_JA = 'https://yasuaki-ito.github.io/book/qcbook/';
 const BOOK_URL_EN = 'https://yasuaki-ito.github.io/book/en/qcbook/';
-const PAPER_URL = 'https://doi.org/10.1016/j.softx.2026.103046';
 
 /** GitHub Octocat mark, inline SVG (currentColor for theme support). */
 const GITHUB_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true" style="vertical-align:-2px;margin-right:3px;">
@@ -19,6 +19,11 @@ const LAW_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentC
   <path d="M8.75.75V2h.985c.304 0 .603.08.867.231l1.29.736c.038.022.08.033.124.033h2.234a.75.75 0 0 1 0 1.5h-.427l2.111 4.692a.75.75 0 0 1-.154.838l-.53-.53.529.531-.001.002-.002.002-.006.006-.006.005-.01.01-.045.04c-.21.176-.441.327-.686.45C14.556 10.78 13.88 11 13 11a4.498 4.498 0 0 1-2.023-.454 3.544 3.544 0 0 1-.686-.45l-.045-.04-.016-.015-.006-.006-.004-.004v-.001a.75.75 0 0 1-.154-.838L12.178 4.5h-.162c-.305 0-.604-.079-.868-.231l-1.29-.736a.245.245 0 0 0-.124-.033H8.75V13h2.5a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.5V3.5h-.984a.245.245 0 0 0-.124.033l-1.289.737c-.265.15-.564.23-.869.23h-.162l2.112 4.692a.75.75 0 0 1-.154.838l-.53-.53.529.531-.001.002-.002.002-.006.006-.016.015-.045.04c-.21.176-.441.327-.686.45C4.556 10.78 3.88 11 3 11a4.498 4.498 0 0 1-2.023-.454 3.544 3.544 0 0 1-.686-.45l-.045-.04-.016-.015-.006-.006-.004-.004v-.001a.75.75 0 0 1-.154-.838L2.178 4.5H1.75a.75.75 0 0 1 0-1.5h2.234a.249.249 0 0 0 .125-.033l1.288-.737c.265-.15.564-.23.869-.23h.984V.75a.75.75 0 0 1 1.5 0Zm2.945 8.477c.285.135.718.273 1.305.273s1.02-.138 1.305-.273L13 6.327Zm-10 0c.285.135.718.273 1.305.273s1.02-.138 1.305-.273L3 6.327Z"/>
 </svg>`;
 
+/** Octicon "bookmark", same glyph MOrbVis uses for its Cite button. */
+const CITE_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true" style="vertical-align:-2px;margin-right:3px;">
+  <path d="M3 1.5A1.5 1.5 0 0 1 4.5 0h7A1.5 1.5 0 0 1 13 1.5v13.25a.25.25 0 0 1-.41.19L8 11.06l-4.59 3.88A.25.25 0 0 1 3 14.75V1.5Zm1.5-.5a.5.5 0 0 0-.5.5v12.16l3.84-3.25a.5.5 0 0 1 .64 0L12 13.66V1.5a.5.5 0 0 0-.5-.5h-7Z"/>
+</svg>`;
+
 /** Build footer HTML using the current UI language (from i18n.getLang). */
 function footerHTML(): string {
   const isJa = getLang() === 'ja';
@@ -28,13 +33,12 @@ function footerHTML(): string {
   const licenseLabel = isJa ? 'BSD 3-Clause ライセンス' : 'BSD 3-Clause License';
   const bookLabel = isJa ? '解説書' : 'Companion textbook';
   const bookHref = isJa ? BOOK_URL_JA : BOOK_URL_EN;
-  const paperLabel = isJa ? '論文 (SoftwareX 2026)' : 'Paper (SoftwareX 2026)';
   return `
     <span>© 2026 Yasuaki Ito</span>
     <span class="sep">·</span>
     <a href="${bookHref}" target="_blank" rel="noopener" class="book-link">📖 ${bookLabel}</a>
     <span class="sep">·</span>
-    <a href="${PAPER_URL}" target="_blank" rel="noopener">📄 ${paperLabel}</a>
+    <button type="button" class="cite-link" id="gansu-cite-btn">${CITE_ICON}${t('cite.label')}</button>
     <span class="sep">·</span>
     <a href="${REPO_URL}/blob/main/LICENSE" target="_blank" rel="noopener">${LAW_ICON}${licenseLabel}</a>
     <span class="sep">·</span>
@@ -55,6 +59,8 @@ function mountFooter(): void {
     document.body.appendChild(footer);
   }
   footer.innerHTML = footerHTML();
+  // innerHTML is rebuilt on every language change, so the listener goes with it.
+  footer.querySelector('#gansu-cite-btn')?.addEventListener('click', showCiteDialog);
 }
 
 if (typeof document !== 'undefined') {

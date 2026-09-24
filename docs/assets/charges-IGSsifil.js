@@ -1,4 +1,4 @@
-import"./styles-T9xqG_Ue.js";import{p as A}from"./parseXYZ-BV3t15l8.js";import{g as j,b as I,B as K,f as G}from"./ri-Dh08ihv_.js";import{a as P,b as D}from"./theoryControls-BlyfxdhA.js";import{a as U,b as Y}from"./properties-mfV5hVSU.js";import{i as _,c as V,r as Q,t as i,a as W,b as X,g as Z}from"./nav-BxAkgz0C.js";import{e as J}from"./radioGroup-C7LT8iiA.js";import{a as ee}from"./moleculeViewer3D-DIcOKf0O.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
+import"./styles-C22XBgWP.js";import{p as A}from"./parseXYZ-BV3t15l8.js";import{g as j,b as I,B as K,f as G}from"./ri-Dh08ihv_.js";import{a as P,b as D}from"./theoryControls-BlyfxdhA.js";import{a as U,b as Y}from"./properties-mfV5hVSU.js";import{i as _,c as V,r as Q,t as i,a as W,b as X,g as Z}from"./nav-B8zugkj2.js";import{e as J}from"./radioGroup-C7LT8iiA.js";import{a as ee}from"./moleculeViewer3D-C4Xiya5A.js";const z=[{id:"h2",labelKey:"chg.scenH2",descKey:"chg.descH2",category:"homo",charge:0,mult:1,xyz:`2
 H2
 H  0.0  0.0  0.0
 H  0.0  0.0  0.740000`},{id:"n2",labelKey:"chg.scenN2",descKey:"chg.descN2",category:"homo",charge:0,mult:1,xyz:`2
