@@ -57,9 +57,18 @@ PySCF cross-check (grid level 5, 17 cases):
 
 | Functional family | ΔE (vs PySCF) | ΔHOMO (vs PySCF) |
 |-------------------|--------------:|-----------------:|
-| LDA / GGA / standard hybrid | < 0.2 mH | < 0.05 eV |
-| TPSS (full PKZB) | 17–60 mH | < 0.2 eV |
-| CAM-B3LYP, ωB97X-D (RSH-lite) | 80–150 mH | 0.6–1.0 eV (expected from simplification) |
+| SVWN, BLYP, B3LYP | < 0.05 mH | < 0.12 eV |
+| PBE, PBE0 | 0.2–2.6 mH | < 0.04 eV |
+| TPSS (full PKZB) | 1–10 mH | < 0.04 eV |
+| CAM-B3LYP, ωB97X-D (RSH-lite) | 80–135 mH | 0.6–1.0 eV (expected from simplification) |
+
+The PBE correlation is built on VWN5 as its local part, where the original PBE uses PW92;
+this is the likely source of the PBE-family offset.
+
+The PySCF reference set is closed-shell only. Spin-polarised correlation is checked
+separately against an independent implementation of the PBE (1996) and VWN5 formulas,
+and the TypeScript and WebAssembly kernels are checked against each other on
+open-shell UKS runs.
 
 ## Performance
 

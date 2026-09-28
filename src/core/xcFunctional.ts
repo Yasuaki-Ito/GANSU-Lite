@@ -119,7 +119,8 @@ function vwn5Correlation(rhoA: number, rhoB: number): XCOutput {
   const f = ((1 + zeta) > 1e-20 ? Math.pow(1 + zeta, 4 / 3) : 0) +
             ((1 - zeta) > 1e-20 ? Math.pow(1 - zeta, 4 / 3) : 0) - 2;
   const fz = f / fzeta_denom;
-  const fpp0 = 4 / (9 * fzeta_denom); // f''(0)
+  // f''(0) = (8/9) / fzeta_denom = 1.709921... (raw d²/dζ² of the numerator is 8/9)
+  const fpp0 = 8 / (9 * fzeta_denom); // f''(0)
 
   const exc = ec0 + ac * fz / fpp0 * (1 - zeta * zeta * zeta * zeta) +
               (ec1 - ec0) * fz * zeta * zeta * zeta * zeta;
@@ -324,7 +325,9 @@ function pbeCorrelation(rhoA: number, rhoB: number,
   const ks = Math.sqrt(4 * kF / Math.PI);
   const t2 = (gammaAA + gammaBB + 2 * gammaAB) / (4 * phi * phi * ks * ks * rho * rho);
 
-  const A = beta_PBE / gamma_PBE / (Math.exp(-vwn.exc / gamma_PBE) - 1 || 1e-30);
+  // PBE (1996) eq. 8: the exponent is -eps_c^unif / (gamma * phi^3). Dropping phi^3 is
+  // invisible for closed shells (phi = 1) but over-binds every spin-polarised density.
+  const A = beta_PBE / gamma_PBE / (Math.exp(-vwn.exc / (gamma_PBE * phi3)) - 1 || 1e-30);
   const At2 = A * t2;
   const H = gamma_PBE * phi3 * Math.log(1 + beta_PBE / gamma_PBE * t2 * (1 + At2) / (1 + At2 + At2 * At2));
 
@@ -342,7 +345,7 @@ function pbeCorrelation(rhoA: number, rhoB: number,
     const kF_ = Math.pow(3 * Math.PI * Math.PI * r, 1 / 3);
     const ks_ = Math.sqrt(4 * kF_ / Math.PI);
     const t2_ = (gAA + gBB + 2 * gAB) / (4 * ph * ph * ks_ * ks_ * r * r);
-    const A_ = beta_PBE / gamma_PBE / (Math.exp(-vwnE / gamma_PBE) - 1 || 1e-30);
+    const A_ = beta_PBE / gamma_PBE / (Math.exp(-vwnE / (gamma_PBE * ph3)) - 1 || 1e-30);
     const At2_ = A_ * t2_;
     const H_ = gamma_PBE * ph3 * Math.log(1 + beta_PBE / gamma_PBE * t2_ * (1 + At2_) / (1 + At2_ + At2_ * At2_));
     return r * H_; // return rho*H (energy per volume)

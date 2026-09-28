@@ -218,7 +218,9 @@ fn vwn5_correlation(rho_a: f64, rho_b: f64) -> (f64, f64, f64) {
         + (if (1.0 - zeta) > 1e-20 { (1.0 - zeta).powf(4.0 / 3.0) } else { 0.0 })
         - 2.0;
     let fz = f_val / fzeta_denom;
-    let fpp0 = 4.0 / (9.0 * fzeta_denom);
+    // f''(0) = (8/9) / fzeta_denom: each of (1 +/- zeta)^{4/3} contributes 4/9 at zeta = 0.
+    // Half of that (the old 4/9) doubles the spin-stiffness term for 0 < zeta < 1.
+    let fpp0 = 8.0 / (9.0 * fzeta_denom);
 
     let z4 = zeta * zeta * zeta * zeta;
     let exc = ec0 + ac * fz / fpp0 * (1.0 - z4) + (ec1 - ec0) * fz * z4;
@@ -388,7 +390,8 @@ fn pbe_correlation(rho_a: f64, rho_b: f64, gamma_aa: f64, gamma_bb: f64, gamma_a
         let kf = (3.0 * PI * PI * r).powf(1.0 / 3.0);
         let ks = (4.0 * kf / PI).sqrt();
         let t2 = (gaa + gbb + 2.0 * gab) / (4.0 * ph * ph * ks * ks * r * r);
-        let exp_val = (-vwn_e / gamma_pbe).exp();
+        // PBE (1996) eq. 8: divide by gamma * phi^3, not gamma alone (matters only when phi < 1).
+        let exp_val = (-vwn_e / (gamma_pbe * ph3)).exp();
         let a = beta_pbe / gamma_pbe / (if (exp_val - 1.0).abs() > 1e-30 { exp_val - 1.0 } else { 1e-30 });
         let at2 = a * t2;
         let h_val = gamma_pbe * ph3 * (1.0 + beta_pbe / gamma_pbe * t2 * (1.0 + at2) / (1.0 + at2 + at2 * at2)).ln();
