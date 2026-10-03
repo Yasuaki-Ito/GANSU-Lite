@@ -66,8 +66,16 @@ export function writeMolden(opts: MoldenOptions): string {
     lines.push(`  ${i + 1} 0`);
     for (const cg of ebs.contractedGausses) {
       lines.push(`${cg.type.toLowerCase()}   ${cg.primitives.length}  1.00`);
+      // The MO coefficients refer to normalised contracted functions, but basis
+      // files ship contraction coefficients that are not normalised (cc-pVDZ's O 2s
+      // contraction has norm² 0.26 as written). Readers that renormalise (Molden,
+      // PySCF) would cope; readers that take the coefficients literally (MOrbVis)
+      // would draw every such orbital wrong. Writing coefficients that already
+      // normalise the contraction makes the file mean the same thing to both.
+      // The factor is the same for every Cartesian component of the shell.
+      const cgtoNorm = cg.getNormalizationFactors()[0];
       for (const p of cg.primitives) {
-        lines.push(`  ${p.exponent.toExponential(10)}  ${p.coefficient.toExponential(10)}`);
+        lines.push(`  ${p.exponent.toExponential(10)}  ${(p.coefficient * cgtoNorm).toExponential(10)}`);
       }
     }
     lines.push('');
