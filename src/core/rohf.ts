@@ -85,8 +85,8 @@ export class ROHF extends HF {
     const X = this.transformMatrix;
 
     // Transform Fα, Fβ to orthogonal basis
-    const FaOrth = matmul(matmulAtB(X, this.fockAlpha), X);
-    const FbOrth = matmul(matmulAtB(X, this.fockBeta), X);
+    const FaOrth = this.toOrthogonalBasis(this.fockAlpha);
+    const FbOrth = this.toOrthogonalBasis(this.fockBeta);
 
     let FeffOrth: Matrix;
 

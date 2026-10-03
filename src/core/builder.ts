@@ -44,6 +44,8 @@ export function buildHF(mol: Molecular, method: HFMethod = 'RHF', dft?: DFTConfi
       throw new Error(`Unknown HF method: ${method}`);
   }
 
+  if (mol.sphericalTransform) hf.setSphericalTransform(mol.sphericalTransform);
+
   if (dft) {
     const functional = createFunctional(dft.functional);
     const targetLevel = dft.gridLevel ?? 'medium';

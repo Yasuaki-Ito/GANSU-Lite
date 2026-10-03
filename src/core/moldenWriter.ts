@@ -15,6 +15,13 @@ export interface MoldenOptions {
   atoms: Atom[];
   basisSet: BasisSet;
   numBasis: number;
+  /**
+   * MOs to write (default numBasis). With pure d/f functions the last columns of C
+   * are null directions with no physical content; they are left out. The real MOs
+   * are still written as Cartesian coefficients — a spherical orbital is an exact
+   * combination of Cartesian functions — so no [5D]/[7F] flag is needed.
+   */
+  numMO?: number;
   // Alpha (or shared for RHF/ROHF) orbitals
   coefficients: Matrix;
   orbitalEnergies: FloatArray;
@@ -27,7 +34,7 @@ export interface MoldenOptions {
 
 export function writeMolden(opts: MoldenOptions): string {
   const {
-    atoms, basisSet, numBasis,
+    atoms, basisSet, numBasis, numMO = numBasis,
     coefficients, orbitalEnergies, numOccupied,
     coefficientsBeta, orbitalEnergiesBeta, numOccupiedBeta,
   } = opts;
@@ -73,7 +80,7 @@ export function writeMolden(opts: MoldenOptions): string {
 
   if (isUHF) {
     // UHF: alpha MOs then beta MOs, Occup = 1.0 or 0.0
-    for (let mo = 0; mo < numBasis; mo++) {
+    for (let mo = 0; mo < numMO; mo++) {
       lines.push(`Sym=   A`);
       lines.push(`Ene= ${orbitalEnergies[mo].toFixed(10)}`);
       lines.push(`Spin= Alpha`);
@@ -83,7 +90,7 @@ export function writeMolden(opts: MoldenOptions): string {
       }
     }
     const nOccBeta = numOccupiedBeta ?? 0;
-    for (let mo = 0; mo < numBasis; mo++) {
+    for (let mo = 0; mo < numMO; mo++) {
       lines.push(`Sym=   A`);
       lines.push(`Ene= ${orbitalEnergiesBeta![mo].toFixed(10)}`);
       lines.push(`Spin= Beta`);
@@ -97,7 +104,7 @@ export function writeMolden(opts: MoldenOptions): string {
     // RHF: Occup = 2.0 / 0.0
     // ROHF: Occup = 2.0 (doubly) / 1.0 (singly) / 0.0 (virtual)
     const nOccBeta = numOccupiedBeta ?? numOccupied; // RHF: beta = alpha
-    for (let mo = 0; mo < numBasis; mo++) {
+    for (let mo = 0; mo < numMO; mo++) {
       lines.push(`Sym=   A`);
       lines.push(`Ene= ${orbitalEnergies[mo].toFixed(10)}`);
       lines.push(`Spin= Alpha`);

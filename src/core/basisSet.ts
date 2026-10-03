@@ -2,6 +2,7 @@
 
 import type { PrimitiveGauss } from './types';
 import { shellNameToType, ANGULAR_MOMENTUMS } from './constants';
+import { conventionallySpherical } from './sphericalBasis';
 
 export class ContractedGauss {
   readonly type: string; // "S", "P", "D", ...
@@ -56,6 +57,14 @@ export class ElementBasisSet {
 export class BasisSet {
   private readonly elementBasisSets = new Map<string, ElementBasisSet>();
 
+  /** Name from the Basis Set Exchange header ("!   Basis set: cc-pVDZ"), or '' if absent. */
+  name = '';
+  /**
+   * Use pure (spherical, 5d/7f) d and f functions instead of Cartesian (6d/10f).
+   * Defaults to the basis set's convention, read from its name; callers may override.
+   */
+  pure = false;
+
   add(ebs: ElementBasisSet) {
     this.elementBasisSets.set(ebs.elementName, ebs);
   }
@@ -72,12 +81,16 @@ export class BasisSet {
     const lines = text.split(/\r?\n/);
     let i = 0;
 
-    // Skip header lines (comments starting with '!' or non-alpha first char)
+    // Skip header lines (comments starting with '!' or non-alpha first char).
+    // BSE exports name the set in one of them, and that name decides the d/f convention.
     while (i < lines.length) {
       const line = lines[i].trim();
       if (line.length > 0 && /^[A-Za-z]/.test(line)) break;
+      const named = /^!\s*Basis set:\s*(.+?)\s*$/i.exec(line);
+      if (named) basisSet.name = named[1];
       i++;
     }
+    basisSet.pure = conventionallySpherical(basisSet.name);
 
     while (i < lines.length) {
       const elementLine = lines[i]?.trim();

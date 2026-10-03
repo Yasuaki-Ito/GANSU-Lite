@@ -27,6 +27,8 @@ No server, no upload, no install — all computations run locally in JavaScript 
 - **Geometry optimisation:** SD, CG (FR/PR/HS/DY), BFGS, DFP, SR1, GDIIS
 - **Properties:** Mulliken / Löwdin charges, Wiberg bond orders, dipole moment, ⟨S²⟩, energy decomposition, Molden export
 - **Basis sets:** STO-3G, 3-21G, 6-31G, cc-pVDZ, aug-cc-pVDZ, def2-SVP, def2-TZVP
+- **d/f functions:** spherical (5d/7f) or Cartesian (6d/10f). By default each basis set follows its own
+  convention — cc-pVXZ and def2 spherical, Pople and STO sets Cartesian — and the Calculator can override it
 - **RI-J:** automatic for pure DFT (auto-generated or optimised cc-pVxZ-RIFIT auxiliary basis)
 - **Performance:** WebAssembly + SIMD acceleration, Web Worker for non-blocking UI
 

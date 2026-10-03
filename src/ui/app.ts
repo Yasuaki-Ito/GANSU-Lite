@@ -307,6 +307,12 @@ export function initApp(root: HTMLElement) {
           <button type="button" class="backend-btn" data-basis="def2-svp" title="def2-SVP (Karlsruhe split-valence + polarisation, ≈ cc-pVDZ)">def2-SVP</button>
           <button type="button" class="backend-btn" data-basis="def2-tzvp" title="def2-TZVP (Karlsruhe triple-zeta + polarisation, common DFT standard)">def2-TZVP</button>
         </div>
+        <label title="${t('tip.purity')}">${t('set.basisPurity')}</label>
+        <div class="backend-toggles" id="purity-toggles">
+          <button type="button" class="backend-btn active" data-purity="auto" title="${t('tip.purityAuto')}">${t('purity.auto')}</button>
+          <button type="button" class="backend-btn" data-purity="spherical" title="${t('tip.puritySph')}">${t('purity.sph')}</button>
+          <button type="button" class="backend-btn" data-purity="cartesian" title="${t('tip.purityCart')}">${t('purity.cart')}</button>
+        </div>
         <label>${t('set.method')}</label>
         <div class="backend-toggles" id="method-toggles">
           <button type="button" class="backend-btn active" data-method="RHF" title="${t('tip.rhf')}">RHF</button>
@@ -587,6 +593,13 @@ export function initApp(root: HTMLElement) {
   }
 
   const basisGroup = initToggleGroup('basis-toggles', 'basis', 'sto-3g', () => { updatePostHFButtons(); updateAuxBasisRow(); });
+  const purityGroup = initToggleGroup('purity-toggles', 'purity', 'auto');
+  /** Apply the d/f choice; 'auto' keeps the convention read from the basis file. */
+  function applyPurity(bs: BasisSet): BasisSet {
+    if (purityGroup.value === 'cartesian') bs.pure = false;
+    else if (purityGroup.value === 'spherical') bs.pure = true;
+    return bs;
+  }
   const theoryGroup = initToggleGroup('theory-toggles', 'theory', 'hf', () => { updateTheoryUI(); updatePostHFButtons(); updateCasidaVisibility(postHFGroup.value); });
   const methodGroup = initToggleGroup('method-toggles', 'method', 'RHF', () => updatePostHFButtons());
   const chargeGroup = initToggleGroup('charge-toggles', 'charge', '0', () => { updatePostHFButtons(); updateMultPreview(); });
@@ -828,7 +841,7 @@ export function initApp(root: HTMLElement) {
     try {
       const gbsText = await loadGBS(basisGroup.value);
       const atoms = parseXYZ(xyzText);
-      const basisSet = BasisSet.fromGBS(gbsText);
+      const basisSet = applyPurity(BasisSet.fromGBS(gbsText));
       const charge = parseInt(chargeGroup.value, 10);
       const mult = parseInt(multGroup.value, 10);
       const betaToAlpha = Math.floor((mult - 1) / 2);
@@ -1073,7 +1086,7 @@ export function initApp(root: HTMLElement) {
 
       // Estimate calculation time and confirm if > 60s
       {
-        const basisSet = BasisSet.fromGBS(gbsText);
+        const basisSet = applyPurity(BasisSet.fromGBS(gbsText));
         const betaToAlpha = Math.floor((multiplicity - 1) / 2);
         const mol = new Molecular(atoms, basisSet, charge, betaToAlpha);
         const N = mol.numBasis;
@@ -1268,7 +1281,7 @@ export function initApp(root: HTMLElement) {
       };
 
       worker.postMessage({
-        type: 'run-scf', xyzText, basisGBS, method, charge, multiplicity, runMP2, runMP3, runCCSD, runGradient, runHessian, runD2, dispersion, initialGuess, eriBackend, scfAccelMethod, scfAccelParams,
+        type: 'run-scf', xyzText, basisGBS, basisPurity: purityGroup.value as 'auto' | 'cartesian' | 'spherical', method, charge, multiplicity, runMP2, runMP3, runCCSD, runGradient, runHessian, runD2, dispersion, initialGuess, eriBackend, scfAccelMethod, scfAccelParams,
         calibration: getCalibration(),
         baseUrl: import.meta.env.BASE_URL,
         dftConfig,
@@ -1309,9 +1322,10 @@ export function initApp(root: HTMLElement) {
 
     handleStep('setup', 'start');
     const betaToAlpha = Math.floor((multiplicity - 1) / 2);
-    const basisSet = BasisSet.fromGBS(gbsText);
+    const basisSet = applyPurity(BasisSet.fromGBS(gbsText));
     const mol = new Molecular(atoms, basisSet, charge, betaToAlpha);
-    log(`Atoms: ${atoms.length}, Basis: ${mol.numBasis}, Electrons: ${mol.numElectrons}`, 'progress');
+    const basisDesc = mol.sphericalTransform ? `${mol.numSpherical} spherical (${mol.numBasis} Cartesian)` : `${mol.numBasis}`;
+    log(`Atoms: ${atoms.length}, Basis: ${basisDesc}, Electrons: ${mol.numElectrons}`, 'progress');
 
     const ab = getActiveBackend();
     const mainBackend = ab === 'wasm-simd' ? 'WASM SIMD' : ab === 'wasm' ? 'WASM' : 'JS';
@@ -1323,7 +1337,7 @@ export function initApp(root: HTMLElement) {
     }
 
     // RI setup: load or generate auxiliary basis and precompute fitting coefficients
-    handleStep('setup', 'done', `${atoms.length} atoms, ${mol.numBasis} basis`);
+    handleStep('setup', 'done', `${atoms.length} atoms, ${basisDesc} basis`);
 
     let riData: RIData | undefined;
     if (useRI && (hf instanceof RHF || hf instanceof UHF || hf instanceof ROHF)) {
@@ -1408,7 +1422,7 @@ export function initApp(root: HTMLElement) {
     let cisStates: CISExcitedState[] | undefined;
     let cisIsTriplet = false;
     if (hf instanceof RHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergies);
+      orbitalEnergies = Array.from(hf.orbitalEnergies).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -1481,10 +1495,10 @@ export function initApp(root: HTMLElement) {
       }
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficients,
-        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
       });
     } else if (hf instanceof ROHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergies);
+      orbitalEnergies = Array.from(hf.orbitalEnergies).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -1555,11 +1569,11 @@ export function initApp(root: HTMLElement) {
       }
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficients,
-        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
         numOccupiedBeta: mol.numBetaSpins,
       });
     } else if (hf instanceof UHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergiesAlpha);
+      orbitalEnergies = Array.from(hf.orbitalEnergiesAlpha).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -1643,7 +1657,7 @@ export function initApp(root: HTMLElement) {
       }
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficientsAlpha,
-        orbitalEnergies: hf.orbitalEnergiesAlpha, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergiesAlpha, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
         coefficientsBeta: hf.coefficientsBeta,
         orbitalEnergiesBeta: hf.orbitalEnergiesBeta,
         numOccupiedBeta: mol.numBetaSpins,
@@ -1704,7 +1718,7 @@ export function initApp(root: HTMLElement) {
     let orbitalEnergiesBeta: number[] | undefined;
     let numOccupiedBeta: number | undefined;
     if (hf instanceof UHF) {
-      orbitalEnergiesBeta = Array.from(hf.orbitalEnergiesBeta);
+      orbitalEnergiesBeta = Array.from(hf.orbitalEnergiesBeta).slice(0, hf.numMO);
       numOccupiedBeta = mol.numBetaSpins;
     } else if (hf instanceof ROHF) {
       numOccupiedBeta = mol.numBetaSpins;

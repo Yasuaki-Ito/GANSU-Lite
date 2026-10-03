@@ -3,6 +3,8 @@
 import type { Atom, PrimitiveShell, ShellTypeInfo, BasisRange } from './types';
 import { atomicNumberToElementName, shellNameToType, shellTypeToNumBasis } from './constants';
 import { BasisSet } from './basisSet';
+import { Matrix } from '../linalg/matrix';
+import { buildCartesianToSpherical, type ContractedShellLayout } from './sphericalBasis';
 
 export class Molecular {
   readonly atoms: Atom[];
@@ -14,6 +16,17 @@ export class Molecular {
   readonly numElectrons: number;
   readonly numAlphaSpins: number;
   readonly numBetaSpins: number;
+  /** Contracted shells in basis order — what a Cartesian→spherical map is built from. */
+  readonly contractedShells: ContractedShellLayout[];
+  /**
+   * Cartesian → spherical map T (numBasis × numSpherical) when the basis set is
+   * used with pure d/f functions; null for a Cartesian basis or one without d/f.
+   * numBasis always counts Cartesian functions, because every integral is
+   * computed over them; the spherical restriction is applied in the SCF.
+   */
+  readonly sphericalTransform: Matrix | null;
+  /** Functions in the variational basis: the spherical count if pure, else numBasis. */
+  readonly numSpherical: number;
 
   constructor(atoms: Atom[], basisSet: BasisSet, charge = 0, betaToAlpha = 0) {
     this.atoms = atoms;
@@ -23,6 +36,7 @@ export class Molecular {
     const primitiveShells: PrimitiveShell[] = [];
     const normFactors: number[] = [];
     const basisRanges: BasisRange[] = [];
+    const contracted: ContractedShellLayout[] = [];
     let basisIndex = 0;
 
     for (let ai = 0; ai < atoms.length; ai++) {
@@ -33,6 +47,7 @@ export class Molecular {
 
       for (const cg of ebs.contractedGausses) {
         const shellType = shellNameToType(cg.type);
+        contracted.push({ basisIndex, shellType });
 
         for (const prim of cg.primitives) {
           primitiveShells.push({
@@ -55,6 +70,11 @@ export class Molecular {
     this.numBasis = basisIndex;
     this.cgtoNormalizationFactors = normFactors;
     this.atomToBasisRange = basisRanges;
+    this.contractedShells = contracted;
+
+    const sph = basisSet.pure ? buildCartesianToSpherical(contracted, basisIndex) : null;
+    this.sphericalTransform = sph?.T ?? null;
+    this.numSpherical = sph?.numSpherical ?? basisIndex;
 
     if (this.numBasis !== normFactors.length) {
       throw new Error(`Basis count mismatch: numBasis=${this.numBasis}, normFactors=${normFactors.length}`);

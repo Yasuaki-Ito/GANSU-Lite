@@ -4,7 +4,7 @@ import { HF } from './hf';
 import type { Atom, PrimitiveShell, ShellTypeInfo, BasisRange } from './types';
 import { Matrix, type FloatArray, copyToFloatArray } from '../linalg/matrix';
 import { jacobiEigen } from '../linalg/eigendecomposition';
-import { matmul, matmulAtB, traceProduct } from '../linalg/matmul';
+import { matmul, traceProduct } from '../linalg/matmul';
 import { computeERIs } from './integrals2e';
 import type { EriBackend } from './hf';
 import { ERIStored } from './eri';
@@ -96,13 +96,13 @@ export class UHF extends HF {
   /** Diagonalize Fock matrices in orthogonal basis for alpha and beta separately */
   computeCoefficientMatrix() {
     // Alpha
-    const FpA = matmul(matmulAtB(this.transformMatrix, this.fockAlpha), this.transformMatrix);
+    const FpA = this.toOrthogonalBasis(this.fockAlpha);
     const eigA = jacobiEigen(FpA);
     this.coeffAlpha = matmul(this.transformMatrix, eigA.eigenvectors);
     this._orbitalEnergiesAlpha = eigA.eigenvalues;
 
     // Beta
-    const FpB = matmul(matmulAtB(this.transformMatrix, this.fockBeta), this.transformMatrix);
+    const FpB = this.toOrthogonalBasis(this.fockBeta);
     const eigB = jacobiEigen(FpB);
     this.coeffBeta = matmul(this.transformMatrix, eigB.eigenvectors);
     this._orbitalEnergiesBeta = eigB.eigenvalues;
@@ -340,11 +340,11 @@ export class UHF extends HF {
     // Commutator errors for alpha and beta
     const FPSa = matmul(matmul(this.fockAlpha, this.densityAlpha), this.overlapMatrix);
     const SPFa = matmul(matmul(this.overlapMatrix, this.densityAlpha), this.fockAlpha);
-    const errorA = FPSa.subMatrix(SPFa);
+    const errorA = this.projectError(FPSa.subMatrix(SPFa));
 
     const FPSb = matmul(matmul(this.fockBeta, this.densityBeta), this.overlapMatrix);
     const SPFb = matmul(matmul(this.overlapMatrix, this.densityBeta), this.fockBeta);
-    const errorB = FPSb.subMatrix(SPFb);
+    const errorB = this.projectError(FPSb.subMatrix(SPFb));
 
     if (this.scfAccelerator) {
       const result = this.scfAccelerator.accelerate({

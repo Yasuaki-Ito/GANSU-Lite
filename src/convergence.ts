@@ -222,7 +222,9 @@ async function runConvergence(): Promise<void> {
 
       results.push({
         basis: basisName,
-        nbasis: mol.numBasis,
+        // Functions in the variational basis: with pure d/f this is the spherical
+        // count, which is what the basis set's size is quoted as in the literature.
+        nbasis: mol.numSpherical,
         energy,
         timeMs,
       });

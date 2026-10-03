@@ -87,6 +87,14 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Settings labels
     'set.basisSet': 'Basis Set',
+    'set.basisPurity': 'd, f functions',
+    'purity.auto': 'Auto',
+    'purity.sph': 'Spherical (5d, 7f)',
+    'purity.cart': 'Cartesian (6d, 10f)',
+    'tip.purity': 'How d and f shells are represented. Spherical harmonics drop the Cartesian-only combinations (the s hidden in a d shell, the p in an f shell).',
+    'tip.purityAuto': 'Follow the convention of the basis set: cc-pVXZ and def2 are spherical, Pople and STO sets are Cartesian.',
+    'tip.puritySph': 'Pure spherical harmonics: 5 d and 7 f functions per shell.',
+    'tip.purityCart': 'Cartesian Gaussians: 6 d and 10 f functions per shell. Gives a slightly lower energy (larger variational space).',
     'set.method': 'Method',
     'set.charge': 'Charge',
     'set.multiplicity': 'Multiplicity',
@@ -750,6 +758,14 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Settings labels
     'set.basisSet': '基底関数',
+    'set.basisPurity': 'd, f 関数',
+    'purity.auto': '自動',
+    'purity.sph': '球面調和 (5d, 7f)',
+    'purity.cart': 'デカルト (6d, 10f)',
+    'tip.purity': 'd・f 殻の表し方。球面調和ではデカルト形にしか無い成分（d 殻に含まれる s、f 殻に含まれる p）を除きます。',
+    'tip.purityAuto': '基底の慣例に従う: cc-pVXZ と def2 は球面調和、Pople 系と STO 系はデカルト。',
+    'tip.puritySph': '球面調和: 1 殻あたり d は 5 個、f は 7 個。',
+    'tip.purityCart': 'デカルト Gauss 関数: 1 殻あたり d は 6 個、f は 10 個。変分空間が広い分、エネルギーはわずかに低くなります。',
     'set.method': '計算手法',
     'set.charge': '電荷',
     'set.multiplicity': 'スピン多重度',

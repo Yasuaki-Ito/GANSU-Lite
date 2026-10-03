@@ -4,7 +4,7 @@ import { HF } from './hf';
 import type { Atom, PrimitiveShell, ShellTypeInfo, BasisRange } from './types';
 import { Matrix, type FloatArray, copyToFloatArray } from '../linalg/matrix';
 import { jacobiEigen } from '../linalg/eigendecomposition';
-import { matmul, matmulAtB, traceProduct } from '../linalg/matmul';
+import { matmul, traceProduct } from '../linalg/matmul';
 import { computeERIs, computeLongRangeERIs } from './integrals2e';
 import type { EriBackend } from './hf';
 import { ERIStored } from './eri';
@@ -80,7 +80,7 @@ export class RHF extends HF {
 
   /** Diagonalize Fock matrix in orthogonal basis: F' = X^T F X → eigensolve → C = X C' */
   computeCoefficientMatrix() {
-    const Fp = matmul(matmulAtB(this.transformMatrix, this.fockMatrix), this.transformMatrix);
+    const Fp = this.toOrthogonalBasis(this.fockMatrix);
     const { eigenvalues, eigenvectors } = jacobiEigen(Fp);
     this.coefficientMatrix = matmul(this.transformMatrix, eigenvectors);
     this._orbitalEnergies = eigenvalues;
@@ -298,7 +298,7 @@ export class RHF extends HF {
     // Compute commutator error: e = F*P*S - S*P*F
     const FPS = matmul(matmul(this.fockMatrix, this.densityMatrix), this.overlapMatrix);
     const SPF = matmul(matmul(this.overlapMatrix, this.densityMatrix), this.fockMatrix);
-    const error = FPS.subMatrix(SPF);
+    const error = this.projectError(FPS.subMatrix(SPF));
 
     if (this.scfAccelerator) {
       // Level Shift needs idempotent density P/2 for RHF

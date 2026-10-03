@@ -34,6 +34,8 @@ export interface WorkerRequest {
   type: 'run-scf';
   xyzText: string;
   basisGBS: string;
+  /** d/f functions: 'auto' follows the basis set's convention (default). */
+  basisPurity?: 'auto' | 'cartesian' | 'spherical';
   method: HFMethod;
   charge: number;
   multiplicity: number;
@@ -83,6 +85,10 @@ export interface WorkerResult {
   dipole: { x: number; y: number; z: number; total: number; debye: number };
   numOccupied: number;
   numBasis: number;
+  /** Functions actually in the variational basis (spherical count when pure). */
+  numSpherical?: number;
+  /** Whether d/f functions were treated as pure (spherical). */
+  pureDF?: boolean;
   densityMatrix?: number[];
   densityMatrixAlpha?: number[];
   densityMatrixBeta?: number[];
@@ -142,7 +148,7 @@ function ccsdDetailFromMsg(msg: string): string {
 }
 
 self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
-  const { xyzText, basisGBS, method, charge, multiplicity, runMP2, runMP3, runCCSD, runCIS, runADC2, excitedTriplet, cisNStates, fullCasida, runGradient, runHessian, runD2, dispersion, initialGuess, eriBackend, calibration, baseUrl, scfAccelMethod, scfAccelParams, dftConfig } = e.data;
+  const { xyzText, basisGBS, basisPurity, method, charge, multiplicity, runMP2, runMP3, runCCSD, runCIS, runADC2, excitedTriplet, cisNStates, fullCasida, runGradient, runHessian, runD2, dispersion, initialGuess, eriBackend, calibration, baseUrl, scfAccelMethod, scfAccelParams, dftConfig } = e.data;
 
   // Inject calibration data (Worker has no localStorage)
   if (calibration) setCalibration(calibration);
@@ -155,9 +161,14 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     post({ type: 'progress', message: 'Parsing molecule...' });
     const atoms = parseXYZ(xyzText);
     const basisSet = BasisSet.fromGBS(basisGBS);
+    if (basisPurity === 'cartesian') basisSet.pure = false;
+    else if (basisPurity === 'spherical') basisSet.pure = true;
     const betaToAlpha = Math.floor((multiplicity - 1) / 2);
     const mol = new Molecular(atoms, basisSet, charge, betaToAlpha);
-    post({ type: 'progress', message: `Atoms: ${atoms.length}, Basis: ${mol.numBasis}, Electrons: ${mol.numElectrons}` });
+    const basisDesc = mol.sphericalTransform
+      ? `${mol.numSpherical} spherical (${mol.numBasis} Cartesian)`
+      : `${mol.numBasis}`;
+    post({ type: 'progress', message: `Atoms: ${atoms.length}, Basis: ${basisDesc}, Electrons: ${mol.numElectrons}` });
 
     // Initialize backends
     const backends: string[] = [];
@@ -191,7 +202,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       post({ type: 'progress', message: `RI-J ready: ${riData.naux} aux functions` });
     }
 
-    post({ type: 'step', id: 'setup', status: 'done', detail: `${atoms.length} atoms, ${mol.numBasis} basis` });
+    post({ type: 'step', id: 'setup', status: 'done', detail: `${atoms.length} atoms, ${basisDesc} basis` });
 
     if (initialGuess === 'sad') {
       post({ type: 'progress', message: 'Computing SAD initial density...' });
@@ -235,7 +246,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     let thermo: import('./hessian').ThermoData | undefined;
 
     if (hf instanceof RHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergies);
+      orbitalEnergies = Array.from(hf.orbitalEnergies).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -413,10 +424,10 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       // Generate Molden file
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficients,
-        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
       });
     } else if (hf instanceof ROHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergies);
+      orbitalEnergies = Array.from(hf.orbitalEnergies).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -481,11 +492,11 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
 
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficients,
-        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergies, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
         numOccupiedBeta: mol.numBetaSpins,
       });
     } else if (hf instanceof UHF) {
-      orbitalEnergies = Array.from(hf.orbitalEnergiesAlpha);
+      orbitalEnergies = Array.from(hf.orbitalEnergiesAlpha).slice(0, hf.numMO);
       numOccupied = mol.numAlphaSpins;
       const charges = computeMullikenCharges(hf.density, hf.overlap, mol.atoms, mol.atomToBasisRange);
       mullikenCharges = Array.from(charges);
@@ -557,7 +568,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
 
       moldenText = writeMolden({
         atoms: mol.atoms, basisSet, coefficients: hf.coefficientsAlpha,
-        orbitalEnergies: hf.orbitalEnergiesAlpha, numOccupied, numBasis: mol.numBasis,
+        orbitalEnergies: hf.orbitalEnergiesAlpha, numOccupied, numBasis: mol.numBasis, numMO: hf.numMO,
         coefficientsBeta: hf.coefficientsBeta,
         orbitalEnergiesBeta: hf.orbitalEnergiesBeta,
         numOccupiedBeta: mol.numBetaSpins,
@@ -618,7 +629,7 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     let orbitalEnergiesBeta: number[] | undefined;
     let numOccupiedBeta: number | undefined;
     if (hf instanceof UHF) {
-      orbitalEnergiesBeta = Array.from(hf.orbitalEnergiesBeta);
+      orbitalEnergiesBeta = Array.from(hf.orbitalEnergiesBeta).slice(0, hf.numMO);
       numOccupiedBeta = mol.numBetaSpins;
     } else if (hf instanceof ROHF) {
       numOccupiedBeta = mol.numBetaSpins;
@@ -657,6 +668,8 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
       dipole,
       numOccupied,
       numBasis: mol.numBasis,
+      numSpherical: mol.numSpherical,
+      pureDF: mol.sphericalTransform !== null,
       densityMatrix,
       densityMatrixAlpha,
       densityMatrixBeta,

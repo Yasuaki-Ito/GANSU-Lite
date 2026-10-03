@@ -3,7 +3,7 @@
 import type { Atom, PrimitiveShell, ShellTypeInfo, BasisRange } from './types';
 import { Matrix } from '../linalg/matrix';
 import { jacobiEigen } from '../linalg/eigendecomposition';
-import { matmul } from '../linalg/matmul';
+import { matmul, matmulAtB } from '../linalg/matmul';
 import { computeOneElectronIntegrals } from './integrals1e';
 import type { SCFAccelMethod, SCFAccelParams, SCFAccelerator } from './scfAccelerator';
 import { createAccelerator } from './accelFactory';
@@ -135,20 +135,102 @@ export abstract class HF {
     this.kineticMatrix = kinetic;
   }
 
-  /** Compute transformation matrix X = U * s^{-1/2} from overlap matrix */
-  computeTransformMatrix() {
-    const { eigenvalues, eigenvectors } = jacobiEigen(this.overlapMatrix);
-    const n = this.numBasis;
+  /**
+   * Cartesian → spherical map T (numBasis × nSph), set when the basis is used with
+   * pure d/f functions. Every integral stays Cartesian; T only restricts the
+   * variational space, inside computeTransformMatrix.
+   */
+  protected sphericalTransform: Matrix | null = null;
 
-    // X = U * s^{-1/2} (filter out near-zero eigenvalues for linear dependence)
-    const sInvSqrt = new Matrix(n, n);
-    for (let i = 0; i < n; i++) {
+  setSphericalTransform(T: Matrix) {
+    if (T.rows !== this.numBasis) throw new Error(`Spherical map has ${T.rows} rows, basis has ${this.numBasis}`);
+    this.sphericalTransform = T;
+  }
+
+  /**
+   * Columns of X that span nothing: linearly dependent directions, and in a
+   * spherical basis the Cartesian-only combinations (the s hidden in a d shell, the
+   * p in an f shell). Diagonalising X^T F X leaves one fake orbital per such column.
+   */
+  protected nullDirections: number[] = [];
+
+  /**
+   * Energy given to the fake orbitals so they sort above every real one. They have
+   * identically zero coefficients, so any correlation method sees them as virtuals
+   * whose integrals all vanish and that therefore contribute nothing.
+   */
+  static readonly NULL_ORBITAL_ENERGY = 1e4;
+
+  /** Real molecular orbitals: the first numMO columns of C (and entries of ε). */
+  get numMO(): number { return this.numBasis - this.nullDirections.length; }
+
+  /**
+   * Compute the orthogonalising transformation X (numBasis × numBasis).
+   *
+   * Cartesian basis: X = U s^{-1/2}, with near-singular directions zeroed.
+   * Spherical basis: X = T U' s'^{-1/2}, where U', s' diagonalise T^T S T. Only the
+   * first nSph columns are non-zero, so every matrix keeps its Cartesian size —
+   * nothing downstream has to know about two dimensions — while C = X C' can only
+   * ever contain pure functions.
+   */
+  computeTransformMatrix() {
+    const n = this.numBasis;
+    const T = this.sphericalTransform;
+    const S = T ? matmul(matmulAtB(T, this.overlapMatrix), T) : this.overlapMatrix;
+    const m = S.rows;
+    const { eigenvalues, eigenvectors } = jacobiEigen(S);
+
+    // U s^{-1/2} (filter out near-zero eigenvalues for linear dependence)
+    const sInvSqrt = new Matrix(m, m);
+    for (let i = 0; i < m; i++) {
       if (eigenvalues[i] > 1e-6) {
         sInvSqrt.set(i, i, 1.0 / Math.sqrt(eigenvalues[i]));
       }
     }
+    const Xsub = matmul(eigenvectors, sInvSqrt);
 
-    this.transformMatrix = matmul(eigenvectors, sInvSqrt);
+    if (!T) {
+      this.transformMatrix = Xsub;
+    } else {
+      const Xsph = matmul(T, Xsub); // n × m
+      const X = new Matrix(n, n);
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < m; j++) X.data[i * n + j] = Xsph.data[i * m + j];
+      }
+      this.transformMatrix = X;
+    }
+
+    this.nullDirections = [];
+    const X = this.transformMatrix;
+    for (let j = 0; j < n; j++) {
+      let zero = true;
+      for (let i = 0; i < n && zero; i++) if (X.data[i * n + j] !== 0) zero = false;
+      if (zero) this.nullDirections.push(j);
+    }
+  }
+
+  /**
+   * F' = X^T F X, with the null directions pushed to NULL_ORBITAL_ENERGY. Without
+   * the shift they diagonalise to ε = 0, which sits below a positive LUMO and would
+   * be reported as one.
+   */
+  protected toOrthogonalBasis(F: Matrix): Matrix {
+    const X = this.transformMatrix;
+    const Fp = matmul(matmulAtB(X, F), X);
+    for (const k of this.nullDirections) Fp.set(k, k, HF.NULL_ORBITAL_ENERGY);
+    return Fp;
+  }
+
+  /**
+   * DIIS error for a restricted variational space. FPS - SPF in the AO basis does
+   * not vanish at convergence when F couples the occupied space to functions
+   * outside it, so the commutator is measured in the orthogonal basis instead.
+   * A full Cartesian basis is returned unchanged, keeping that path bit-identical.
+   */
+  protected projectError(e: Matrix): Matrix {
+    if (this.nullDirections.length === 0) return e;
+    const X = this.transformMatrix;
+    return matmul(matmulAtB(X, e), X);
   }
 
   /** Abstract methods implemented by derived classes */
