@@ -593,7 +593,7 @@ export function initApp(root: HTMLElement) {
   }
 
   const basisGroup = initToggleGroup('basis-toggles', 'basis', 'sto-3g', () => { updatePostHFButtons(); updateAuxBasisRow(); });
-  const purityGroup = initToggleGroup('purity-toggles', 'purity', 'auto');
+  const purityGroup = initToggleGroup('purity-toggles', 'purity', 'auto', () => { updatePostHFButtons(); });
   /** Apply the d/f choice; 'auto' keeps the convention read from the basis file. */
   function applyPurity(bs: BasisSet): BasisSet {
     if (purityGroup.value === 'cartesian') bs.pure = false;
@@ -810,6 +810,9 @@ export function initApp(root: HTMLElement) {
 
   /** Count contracted shells and basis functions by angular momentum type */
   function shellBreakdownDetail(mol: Molecular): { label: string; nBasis: number }[] {
+    // A pure d/f basis has 2l+1 functions per shell, not the Cartesian count.
+    const pure = mol.sphericalTransform !== null;
+    const perShell = (l: number) => (pure && l >= 2 ? 2 * l + 1 : (SHELL_NBASIS[l] ?? 1));
     const seen = new Set<number>();
     const counts: number[] = [];
     for (const ps of mol.primitiveShells) {
@@ -820,7 +823,7 @@ export function initApp(root: HTMLElement) {
       }
     }
     return counts
-      .map((c, i) => c > 0 ? { label: SHELL_LABELS[i] ?? `L${i}`, nBasis: c * (SHELL_NBASIS[i] ?? 1), count: c } : null)
+      .map((c, i) => c > 0 ? { label: SHELL_LABELS[i] ?? `L${i}`, nBasis: c * perShell(i), count: c } : null)
       .filter((x): x is { label: string; nBasis: number; count: number } => x !== null)
       .map(x => ({ label: `${x.count}${x.label}`, nBasis: x.nBasis }));
   }
@@ -846,7 +849,8 @@ export function initApp(root: HTMLElement) {
       const mult = parseInt(multGroup.value, 10);
       const betaToAlpha = Math.floor((mult - 1) / 2);
       const mol = new Molecular(atoms, basisSet, charge, betaToAlpha);
-      const n = mol.numBasis;
+      // Size of the variational basis — the spherical count when d/f are pure.
+      const n = mol.numSpherical;
 
       const isRI = eriMethodGroup.value === 'ri';
       const method = methodGroup.value;
