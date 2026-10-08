@@ -356,19 +356,26 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
         const nStates = cisNStates ?? 5;
         const adc2Triplet = excitedTriplet ?? false;
         post({ type: 'progress', message: `Computing ADC(2) ${adc2Triplet ? 'triplet' : 'singlet'} excited states (${nStates} roots)...` });
-        const adc2Result = computeADC2(
-          hf.coefficients, hf.orbitalEnergies, hf.eriStore,
-          numOccupied, mol.numBasis, nStates,
-          mol.primitiveShells, mol.cgtoNormalizationFactors,
-          (msg) => post({ type: 'progress', message: msg }),
-          adc2Triplet,
-        );
-        cisStates = adc2Result.states;
-        cisIsTriplet = adc2Triplet;
-        // Use ADC(2)'s MP2 energy if MP2 wasn't requested separately
-        if (!mp2Energy) mp2Energy = adc2Result.mp2Energy;
-        post({ type: 'progress', message: `ADC(2): ${cisStates.length} excited states computed` });
-        post({ type: 'step', id: 'adc2', status: 'done', detail: `${cisStates.length} states` });
+        try {
+          const adc2Result = computeADC2(
+            hf.coefficients, hf.orbitalEnergies, hf.eriStore,
+            numOccupied, mol.numBasis, nStates,
+            mol.primitiveShells, mol.cgtoNormalizationFactors,
+            (msg) => post({ type: 'progress', message: msg }),
+            adc2Triplet,
+          );
+          cisStates = adc2Result.states;
+          cisIsTriplet = adc2Triplet;
+          // Use ADC(2)'s MP2 energy if MP2 wasn't requested separately
+          if (!mp2Energy) mp2Energy = adc2Result.mp2Energy;
+          post({ type: 'progress', message: `ADC(2): ${cisStates.length} excited states computed` });
+          post({ type: 'step', id: 'adc2', status: 'done', detail: `${cisStates.length} states` });
+        } catch (err) {
+          // Too large for the browser: keep the SCF results, report ADC(2) as skipped.
+          const msg = err instanceof Error ? err.message : String(err);
+          post({ type: 'progress', message: `ADC(2) skipped: ${msg}` });
+          post({ type: 'step', id: 'adc2', status: 'done', detail: 'skipped (too large)' });
+        }
       }
 
       if (runGradient) {
